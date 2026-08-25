@@ -29,39 +29,12 @@ class AuthProvider extends ChangeNotifier {
         _error = null;
       }
     } catch (e) {
-      _error = e.toString();
+      // User not authenticated - that's fine
+      _error = null;
+      _user = null;
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  Future<bool> loginWithPhone(String phone, String otp) async {
-    try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
-
-      // For demo - simulate successful login
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Create mock user for demo
-      _user = User(
-        id: 'demo_user_123',
-        name: 'Demo User',
-        phone: phone,
-        email: 'demo@email.com',
-        isEmergencyActive: false,
-      );
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
-      notifyListeners();
-      return false;
     }
   }
 
@@ -122,6 +95,40 @@ class AuthProvider extends ChangeNotifier {
         return true;
       } else {
         _error = response['message'] ?? 'Login failed';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Phone login with OTP
+  Future<bool> loginWithPhone(String phone, String otp) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      // Demo OTP verification
+      if (otp == '123456') {
+        // Create demo user
+        _user = User(
+          id: 'demo_user_123',
+          name: 'Demo User',
+          phone: phone,
+          email: 'demo@email.com',
+          isEmergencyActive: false,
+        );
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        _error = 'Invalid OTP. Use 123456 for demo.';
         _isLoading = false;
         notifyListeners();
         return false;

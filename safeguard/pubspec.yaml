@@ -42,14 +42,15 @@ dependencies:
   shared_preferences: ^2.5.5
   google_maps_flutter: ^2.18.0
   geolocator: ^14.0.3
-  geocoding: ^5.0.0
   camera: ^0.12.0+2
   image_picker: ^1.2.3
+  firebase_core: ^4.13.0
   firebase_messaging: ^16.5.0
   flutter_local_notifications: ^22.3.0
   intl: ^0.20.3
   permission_handler: ^13.0.1
   url_launcher: ^6.3.2
+  another_telephony: ^0.4.1
 
 dev_dependencies:
   flutter_test:

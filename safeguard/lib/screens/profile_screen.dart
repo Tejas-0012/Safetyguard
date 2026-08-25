@@ -59,7 +59,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Profile Image
             Center(
               child: Stack(
                 children: [
@@ -91,7 +90,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           size: 20,
                         ),
                         onPressed: () {
-                          // Implement image picker
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Image picker coming soon!'),
+                            ),
+                          );
                         },
                       ),
                     ),
@@ -101,7 +104,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 30),
 
-            // Name
             _buildInfoField(
               label: 'Full Name',
               controller: _nameController,
@@ -110,7 +112,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Phone
             _buildInfoField(
               label: 'Phone Number',
               controller: _phoneController,
@@ -119,7 +120,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Email
             _buildInfoField(
               label: 'Email Address',
               controller: _emailController,
@@ -128,7 +128,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 30),
 
-            // Stats
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -151,7 +150,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 30),
 
-            // Logout Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(

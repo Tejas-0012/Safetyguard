@@ -25,6 +25,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
   @override
+  void initState() {
+    super.initState();
+    // ✅ Set default country code
+    _phoneController.text = '+91 ';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
@@ -51,7 +58,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 const SizedBox(height: 20),
 
-                // Back Button
                 IconButton(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -61,7 +67,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 10),
 
-                // Title
                 Text(
                   'Create Profile',
                   style: GoogleFonts.poppins(
@@ -83,7 +88,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 40),
 
-                // Form
                 Form(
                   key: _formKey,
                   child: Column(
@@ -126,7 +130,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Phone
+                      // ✅ Phone with +91 default
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.1),
@@ -144,13 +148,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             labelStyle: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                             ),
-                            prefixIcon: const Icon(
-                              Icons.phone,
-                              color: Colors.white,
+                            prefixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(width: 16),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: const [
+                                      Icon(
+                                        Icons.flag,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '+91',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
                             ),
                             border: InputBorder.none,
                             contentPadding: const EdgeInsets.all(16),
-                            hintText: '+91 XXXXX XXXXX',
+                            hintText: '98765 43210',
                             hintStyle: TextStyle(
                               color: Colors.white.withOpacity(0.5),
                             ),
@@ -159,8 +194,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your phone number';
                             }
-                            if (value.length < 10) {
-                              return 'Enter a valid phone number';
+                            // ✅ Remove +91 prefix for validation
+                            String cleanNumber = value.replaceAll('+91 ', '');
+                            if (cleanNumber.length < 10) {
+                              return 'Enter a valid 10-digit phone number';
                             }
                             return null;
                           },
@@ -320,7 +357,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
-                // Error Message
                 if (authProvider.error != null) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -351,7 +387,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Register Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -389,7 +424,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 20),
 
-                // Login Option
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -431,10 +465,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     authProvider.clearError();
 
     try {
+      // ✅ Clean phone number - remove +91 and spaces
+      String phone = _phoneController.text.trim();
+      phone = phone.replaceAll('+91 ', '');
+      phone = phone.replaceAll(' ', '');
+      phone = phone.replaceAll('-', '');
+
+      // ✅ Add +91 prefix
+      phone = '+91$phone';
+
       final success = await authProvider.register(
         _nameController.text.trim(),
-        _phoneController.text.trim(),
-        _emailController.text.trim(),
+        phone,
+        _emailController.text.trim().toLowerCase(),
         _passwordController.text,
       );
 

@@ -449,11 +449,17 @@ class _HomeScreenState extends State<HomeScreen> {
         listen: false,
       );
       final position = locationProvider.currentPosition;
-
+      print('📝 SOS TRIGGERED');
+      print('📝 Position: $position');
+      print('📝 Latitude: ${position?.latitude}');
+      print('📝 Longitude: ${position?.longitude}');
       if (position != null) {
         final emergencyProvider = Provider.of<EmergencyProvider>(
           context,
           listen: false,
+        );
+        print(
+          '📤 Sending: latitude=${position.latitude}, longitude=${position.longitude}',
         );
         final success = await emergencyProvider.startEmergency(
           position.latitude,
@@ -463,6 +469,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (success && mounted) {
           Navigator.pushNamed(context, '/emergency');
         } else {
+          print('❌ Emergency start failed: ${emergencyProvider.error}');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -472,6 +479,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         }
+      } else {
+        print('❌ No location available!');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to get your location. Please enable GPS.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

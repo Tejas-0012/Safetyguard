@@ -20,6 +20,7 @@ class LocationProvider extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> _initialize() async {
+    await Future.delayed(const Duration(milliseconds: 500));
     await getCurrentLocation();
   }
 
@@ -37,10 +38,11 @@ class LocationProvider extends ChangeNotifier {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
+      print('Error getting location: $e');
     }
   }
 
-  Future<void> startTracking() async {
+  void startTracking() {
     if (_isTracking) return;
 
     try {
@@ -55,6 +57,7 @@ class LocationProvider extends ChangeNotifier {
       _error = e.toString();
       _isTracking = false;
       notifyListeners();
+      print('Error starting tracking: $e');
     }
   }
 

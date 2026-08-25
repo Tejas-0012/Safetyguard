@@ -2,11 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 // Providers
 import 'providers/auth_provider.dart';
 import 'providers/emergency_provider.dart';
 import 'providers/location_provider.dart';
+
+// Services
+import 'services/api_service.dart';
+import 'services/location_service.dart';
+import 'services/notification_service.dart';
+import 'services/sms_service.dart';
 
 // Screens
 import 'screens/splash_screen.dart';
@@ -18,17 +25,14 @@ import 'screens/emergency_mode_screen.dart';
 import 'screens/emergency_monitoring_screen.dart';
 import 'screens/profile_screen.dart';
 
-// Services
-import 'services/api_service.dart';
-import 'services/location_service.dart';
-import 'services/notification_service.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp();
   // Initialize services
   final apiService = ApiService();
   final locationService = LocationService();
+  final smsService = SmsService();
   await NotificationService.initialize();
 
   runApp(
@@ -39,6 +43,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => LocationProvider(locationService),
         ),
+        Provider<SmsService>.value(value: smsService),
       ],
       child: const MyApp(),
     ),

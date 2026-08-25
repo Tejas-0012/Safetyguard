@@ -40,7 +40,6 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
           ? const Center(child: Text('No active emergency'))
           : Column(
               children: [
-                // Emergency Info
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: Colors.red.shade50,
@@ -78,7 +77,6 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                   ),
                 ),
 
-                // Map
                 Expanded(
                   flex: 2,
                   child: emergency.currentLocation != null
@@ -97,7 +95,6 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                       : const Center(child: CircularProgressIndicator()),
                 ),
 
-                // Location updates
                 Container(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -138,7 +135,6 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                   ),
                 ),
 
-                // Action Buttons
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -146,7 +142,11 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            // Navigate to location
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Navigate feature coming soon!'),
+                              ),
+                            );
                           },
                           icon: const Icon(Icons.directions),
                           label: const Text('NAVIGATE'),
@@ -160,7 +160,11 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            // Call user
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Call feature coming soon!'),
+                              ),
+                            );
                           },
                           icon: const Icon(Icons.call),
                           label: const Text('CALL'),

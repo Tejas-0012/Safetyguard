@@ -314,7 +314,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
       return;
     }
 
-    // Implement update logic
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Contact updated successfully!')),

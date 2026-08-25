@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "965316311315",
+    "project_id": "safety-a2a21",
+    "storage_bucket": "safety-a2a21.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:965316311315:android:673a8130dfa3c3390402e6",
+        "android_client_info": {
+          "package_name": "com.example.safeguard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCla5AnWNa8XK0nnYs4-WT9NUxRkf2VsLo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

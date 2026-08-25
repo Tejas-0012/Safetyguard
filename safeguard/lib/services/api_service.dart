@@ -2,8 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:5000/api'; // Android emulator
-  // static const String baseUrl = 'http://localhost:5000/api'; // iOS
+  // static const String baseUrl = 'http://10.0.2.2:5000/api'; // Android emulator
+  static const String baseUrl = 'http://10.45.70.187:5000/api';
 
   final Dio _dio = Dio();
 
@@ -12,7 +12,6 @@ class ApiService {
     _dio.options.connectTimeout = const Duration(seconds: 30);
     _dio.options.receiveTimeout = const Duration(seconds: 30);
 
-    // Add interceptor for token
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {

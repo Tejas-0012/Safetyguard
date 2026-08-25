@@ -20,12 +20,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _otpSent = false;
-  bool _isPhoneLogin = true; // Toggle between phone and email login
+  bool _isPhoneLogin = true;
   bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
+    _phoneController.text = '+91 ';
     _checkAuth();
   }
 
@@ -66,7 +67,6 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const SizedBox(height: 40),
 
-                // Welcome Text
                 Text(
                   'Welcome Back!',
                   style: GoogleFonts.poppins(
@@ -232,7 +232,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     GestureDetector(
                       onTap: () {
-                        // Resend OTP logic
                         setState(() {
                           _otpSent = false;
                           _otpController.clear();
@@ -321,7 +320,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // Error Message
                 if (authProvider.error != null) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -352,7 +350,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -392,7 +389,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // Register Option
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -438,14 +434,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isPhoneLogin) {
-        // Phone OTP Login
         if (!_otpSent) {
           if (_phoneController.text.isEmpty) {
             _showSnackBar('Please enter your phone number');
             setState(() => _isLoading = false);
             return;
           }
-          // Simulate sending OTP
           await Future.delayed(const Duration(seconds: 1));
           setState(() {
             _otpSent = true;
@@ -461,10 +455,8 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
-        // Verify OTP - Simulate
         await Future.delayed(const Duration(seconds: 1));
         if (_otpController.text == '123456') {
-          // Demo OTP
           final success = await authProvider.loginWithPhone(
             _phoneController.text,
             _otpController.text,
@@ -479,7 +471,6 @@ class _LoginScreenState extends State<LoginScreen> {
           _showSnackBar('Invalid OTP. Try 123456 for demo.');
         }
       } else {
-        // Email Login
         if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
           _showSnackBar('Please enter email and password');
           setState(() => _isLoading = false);

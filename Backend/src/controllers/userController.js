@@ -1,6 +1,7 @@
 const User = require('../models/User');
 
-// @desc    Get User Profile
+// ============ GET PROFILE ============
+// @desc    Get user profile
 // @route   GET /api/users/profile
 // @access  Private
 exports.getProfile = async (req, res) => {
@@ -12,23 +13,25 @@ exports.getProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
     res.status(200).json({
       success: true,
-      user
+      user,
     });
   } catch (error) {
+    console.error('Get profile error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || 'Server error getting profile',
     });
   }
 };
 
-// @desc    Update User Profile
+// ============ UPDATE PROFILE ============
+// @desc    Update user profile
 // @route   PUT /api/users/profile
 // @access  Private
 exports.updateProfile = async (req, res) => {
@@ -39,8 +42,35 @@ exports.updateProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
+    }
+
+    // Check if email/phone is taken by another user
+    if (email) {
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: req.user.id },
+      });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already taken',
+        });
+      }
+    }
+
+    if (phone) {
+      const existingUser = await User.findOne({
+        phone,
+        _id: { $ne: req.user.id },
+      });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone number is already taken',
+        });
+      }
     }
 
     // Update fields
@@ -53,54 +83,57 @@ exports.updateProfile = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        profileImage: user.profileImage,
-        isEmergencyActive: user.isEmergencyActive
-      }
+      user,
     });
   } catch (error) {
+    console.error('Update profile error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || 'Server error updating profile',
     });
   }
 };
 
-// @desc    Update User Location
+// ============ UPDATE LOCATION ============
+// @desc    Update user location
 // @route   PUT /api/users/location
 // @access  Private
 exports.updateLocation = async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
 
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required',
+      });
+    }
+
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
     user.currentLocation = {
       latitude,
       longitude,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     await user.save();
 
     res.status(200).json({
       success: true,
-      location: user.currentLocation
+      location: user.currentLocation,
     });
   } catch (error) {
+    console.error('Update location error:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message || 'Server error updating location',
     });
   }
 };

@@ -11,22 +11,36 @@ const userRoutes = require('./src/routes/userRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const emergencyRoutes = require('./src/routes/emergencyRoutes');
 
+// Import error handler
+const errorHandler = require('./src/middleware/errorHandler');
+
 const app = express();
 
-// Middleware
+// ============ MIDDLEWARE ============
+
+// Security
 app.use(helmet());
-app.use(cors());
+
+// CORS
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+}));
+
+// Body parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
 });
 app.use('/api', limiter);
 
-// Routes
+// ============ ROUTES ============
+
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/contacts', contactRoutes);
@@ -34,19 +48,45 @@ app.use('/api/emergency', emergencyRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'SafeGuard API is running' });
+  res.json({
+    status: 'OK',
+    message: 'SafeGuard API is running',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
 });
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ MongoDB Connected'))
-.catch(err => console.error('❌ MongoDB Connection Error:', err));
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+  });
+});
 
-// Start server
+// Error handler
+app.use(errorHandler);
+
+// ============ DATABASE CONNECTION ============
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('✅ MongoDB Connected Successfully');
+  } catch (error) {
+    console.error('❌ MongoDB Connection Failed:', error.message);
+    process.exit(1);
+  }
+};
+
+// ============ START SERVER ============
+
 const PORT = process.env.PORT || 5000;
+
+connectDB();
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API URL: http://localhost:${PORT}/api`);
 });

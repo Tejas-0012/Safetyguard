@@ -1,82 +1,83 @@
-// Format response
+// ============ FORMAT RESPONSE ============
 const formatResponse = (success, message, data = null) => {
   return {
     success,
     message,
-    data
+    data,
+    timestamp: new Date().toISOString(),
   };
 };
 
-// Generate OTP
+// ============ GENERATE OTP ============
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Validate email
+// ============ VALIDATE EMAIL ============
 const isValidEmail = (email) => {
   const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
   return emailRegex.test(email);
 };
 
-// Validate phone
+// ============ VALIDATE PHONE ============
 const isValidPhone = (phone) => {
   const phoneRegex = /^\+?[0-9]{10,14}$/;
   return phoneRegex.test(phone);
 };
 
-// Calculate distance between two coordinates (Haversine formula)
+// ============ CALCULATE DISTANCE (Haversine formula) ============
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth's radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
 
-// Format date
+// ============ FORMAT DATE ============
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
   });
 };
 
-// Format time
+// ============ FORMAT TIME ============
 const formatTime = (date) => {
   return new Date(date).toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
   });
 };
 
-// Get current timestamp
+// ============ GET CURRENT TIMESTAMP ============
 const getCurrentTimestamp = () => {
   return new Date().toISOString();
 };
 
-// Mask sensitive data
+// ============ MASK PHONE ============
 const maskPhone = (phone) => {
   if (!phone || phone.length < 10) return phone;
   return phone.slice(0, 3) + '****' + phone.slice(-4);
 };
 
-// Generate random token
+// ============ GENERATE RANDOM TOKEN ============
 const generateToken = () => {
   return require('crypto').randomBytes(32).toString('hex');
 };
 
-// Check if array is empty
+// ============ CHECK IF ARRAY IS EMPTY ============
 const isEmpty = (arr) => {
   return !arr || arr.length === 0;
 };
 
-// Group array by key
+// ============ GROUP BY KEY ============
 const groupBy = (arr, key) => {
   return arr.reduce((acc, item) => {
     const group = item[key];
@@ -86,9 +87,31 @@ const groupBy = (arr, key) => {
   }, {});
 };
 
-// Sleep function
+// ============ SLEEP FUNCTION ============
 const sleep = (ms) => {
   return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+// ============ GET PAGINATION ============
+const getPagination = (page = 1, limit = 10) => {
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+  const skip = (pageNum - 1) * limitNum;
+  return { page: pageNum, limit: limitNum, skip };
+};
+
+// ============ GENERATE SLUG ============
+const generateSlug = (text) => {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
+// ============ TRUNCATE TEXT ============
+const truncateText = (text, maxLength = 100) => {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
 };
 
 module.exports = {
@@ -104,5 +127,8 @@ module.exports = {
   generateToken,
   isEmpty,
   groupBy,
-  sleep
+  sleep,
+  getPagination,
+  generateSlug,
+  truncateText,
 };

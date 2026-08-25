@@ -6,6 +6,7 @@ class EmergencyContact {
   final String? email;
   final String? relation;
   final bool isNotified;
+  final DateTime? createdAt;
 
   EmergencyContact({
     required this.id,
@@ -15,6 +16,7 @@ class EmergencyContact {
     this.email,
     this.relation,
     this.isNotified = false,
+    this.createdAt,
   });
 
   factory EmergencyContact.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,9 @@ class EmergencyContact {
       email: json['email'],
       relation: json['relation'],
       isNotified: json['isNotified'] ?? false,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
     );
   }
 
@@ -38,6 +43,7 @@ class EmergencyContact {
       'email': email,
       'relation': relation,
       'isNotified': isNotified,
+      'createdAt': createdAt?.toIso8601String(),
     };
   }
 }

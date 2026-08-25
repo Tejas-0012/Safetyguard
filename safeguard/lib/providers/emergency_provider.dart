@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/emergency_model.dart';
 import '../models/contact_model.dart';
+import '../models/user_model.dart';
 
 class EmergencyProvider extends ChangeNotifier {
   final ApiService _apiService;

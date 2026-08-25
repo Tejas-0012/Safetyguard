@@ -9,6 +9,7 @@ class Emergency {
   final List<String> notifiedContacts;
   final List<EmergencyImage> cameraImages;
   final bool isVideoActive;
+  final DateTime? createdAt;
 
   Emergency({
     required this.id,
@@ -21,6 +22,7 @@ class Emergency {
     this.notifiedContacts = const [],
     this.cameraImages = const [],
     this.isVideoActive = false,
+    this.createdAt,
   });
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,9 @@ class Emergency {
               .toList() ??
           [],
       isVideoActive: json['isVideoActive'] ?? false,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
     );
   }
 }

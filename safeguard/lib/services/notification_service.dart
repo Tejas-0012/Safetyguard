@@ -1,18 +1,22 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class NotificationService {
-  static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
+    // Firebase is backend-only for now — skip Firebase Messaging on web
+    // since there's no web config / VAPID key / service worker set up.
+    if (kIsWeb) {
+      return;
+    }
+
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
     // Request permissions
-    NotificationSettings settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
 
     // Initialize local notifications
     const androidSettings = AndroidInitializationSettings(
@@ -36,7 +40,6 @@ class NotificationService {
   }
 
   static void _handleMessageOpen(RemoteMessage message) {
-    // Navigate to emergency screen based on payload
     final data = message.data;
     if (data['type'] == 'emergency') {
       // Navigate to monitoring screen
@@ -74,10 +77,12 @@ class NotificationService {
   }
 
   static Future<String?> getDeviceToken() async {
-    return await _messaging.getToken();
+    if (kIsWeb) return null;
+    return await FirebaseMessaging.instance.getToken();
   }
 
   static Future<void> subscribeToTopic(String topic) async {
-    await _messaging.subscribeToTopic(topic);
+    if (kIsWeb) return;
+    await FirebaseMessaging.instance.subscribeToTopic(topic);
   }
 }

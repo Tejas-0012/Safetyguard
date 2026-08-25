@@ -5,7 +5,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
-import '../services/api_service.dart';
+import '../providers/auth_provider.dart';
+import '../services/sms_service.dart';
 
 class EmergencyModeScreen extends StatefulWidget {
   const EmergencyModeScreen({Key? key}) : super(key: key);
@@ -19,6 +20,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   Set<Marker> _markers = {};
   String _locationUpdate = 'Updating...';
   bool _isCapturingImage = false;
+  bool _isSendingSms = false;
 
   @override
   void initState() {
@@ -36,19 +38,16 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       listen: false,
     );
 
-    // Start tracking if not already
     if (!locationProvider.isTracking) {
       locationProvider.startTracking();
     }
 
-    // Listen for location updates
     locationProvider.addListener(() {
       final position = locationProvider.currentPosition;
       if (position != null && emergencyProvider.currentEmergency != null) {
         _updateLocation(position.latitude, position.longitude);
         _updateMarker(LatLng(position.latitude, position.longitude));
 
-        // Send location to backend
         emergencyProvider.updateEmergencyLocation(
           emergencyProvider.currentEmergency!.id,
           position.latitude,
@@ -76,6 +75,61 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
         ),
       };
     });
+  }
+
+  Future<void> _sendSmsToContacts() async {
+    final emergencyProvider = Provider.of<EmergencyProvider>(
+      context,
+      listen: false,
+    );
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
+    );
+    final smsService = Provider.of<SmsService>(context, listen: false);
+
+    final emergency = emergencyProvider.currentEmergency;
+    final user = authProvider.user;
+    final position = locationProvider.currentPosition;
+
+    if (emergency == null || user == null || position == null) return;
+
+    setState(() => _isSendingSms = true);
+
+    try {
+      final contacts = emergencyProvider.contacts;
+      int sentCount = 0;
+
+      for (final contact in contacts) {
+        final success = await smsService.sendEmergencyAlert(
+          contactName: contact.name,
+          contactPhone: contact.phone,
+          userName: user.name,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          emergencyId: emergency.id,
+        );
+
+        if (success) sentCount++;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ SMS sent to $sentCount/${contacts.length} contacts'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error sending SMS: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isSendingSms = false);
+    }
   }
 
   @override
@@ -109,7 +163,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Emergency Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -149,7 +202,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
               ),
             ),
 
-            // Map
             Expanded(
               flex: 2,
               child: position != null
@@ -165,7 +217,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   : const Center(child: CircularProgressIndicator()),
             ),
 
-            // Status Info
             Container(
               padding: const EdgeInsets.all(16),
               color: Colors.grey.shade50,
@@ -205,13 +256,19 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                         'Alert sent to: ${emergency.notifiedContacts.length} contacts',
                         style: const TextStyle(fontSize: 14),
                       ),
+                      const Spacer(),
+                      if (_isSendingSms)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
 
-            // Action Buttons
             Container(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -239,28 +296,28 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _isCapturingImage ? null : _toggleVideo,
+                      onPressed: _isSendingSms ? null : _sendSmsToContacts,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: emergency.isVideoActive
-                            ? Colors.red
-                            : Colors.green,
+                        backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                       ),
-                      icon: Icon(
-                        emergency.isVideoActive
-                            ? Icons.videocam_off
-                            : Icons.videocam,
-                      ),
-                      label: Text(
-                        emergency.isVideoActive ? 'STOP VIDEO' : 'START VIDEO',
-                      ),
+                      icon: _isSendingSms
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.sms),
+                      label: const Text('SEND SMS'),
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Stop Emergency Button
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               width: double.infinity,
@@ -290,8 +347,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       final image = await picker.pickImage(source: ImageSource.camera);
 
       if (image != null) {
-        // Here you would upload the image to your backend
-        // For now, show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('📸 Image captured successfully!')),
         );
@@ -302,21 +357,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     } finally {
       setState(() => _isCapturingImage = false);
     }
-  }
-
-  void _toggleVideo() {
-    // Implement WebRTC video streaming toggle
-    final emergencyProvider = Provider.of<EmergencyProvider>(
-      context,
-      listen: false,
-    );
-    // Toggle video status
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Video streaming feature coming soon!'),
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   void _stopEmergency(BuildContext context, EmergencyProvider provider) async {
@@ -336,7 +376,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('YES, I\'M SAFE'),
+            child: const Text("YES, I'M SAFE"),
           ),
         ],
       ),

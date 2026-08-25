@@ -7,7 +7,7 @@ const {
   stopEmergency,
   getEmergencyStatus,
   getHistory,
-  addImage
+  addImage,
 } = require('../controllers/emergencyController');
 
 router.post('/start', protect, startEmergency);

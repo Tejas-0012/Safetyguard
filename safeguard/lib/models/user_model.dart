@@ -38,9 +38,7 @@ class User {
           ? Location.fromJson(json['currentLocation'])
           : null,
       contactIds: List<String>.from(json['contactIds'] ?? []),
-      createdAt:
-          json['createdAt'] !=
-              null // ✅ added
+      createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : null,
     );
