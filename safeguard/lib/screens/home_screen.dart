@@ -435,21 +435,21 @@ class _HomeScreenState extends State<HomeScreen> {
       emergencyProvider.loadContacts();
     }
 
+    // ✅ Create state variables OUTSIDE the builder
+    Map<String, bool> selectedContacts = {};
+    for (var contact in emergencyProvider.contacts) {
+      selectedContacts[contact.id] = true;
+    }
+
+    bool shareCamera = false;
+    bool shareVideo = false;
+
     showDialog(
       context: context,
       barrierDismissible: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           print('📱 SOS Dialog is building...');
-          // ✅ Initialize selected contacts (all selected by default)
-          Map<String, bool> selectedContacts = {};
-          for (var contact in emergencyProvider.contacts) {
-            selectedContacts[contact.id] = true;
-          }
-
-          // ✅ Toggle states
-          bool shareCamera = false;
-          bool shareVideo = false;
 
           return AlertDialog(
             title: Row(
@@ -471,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // ✅ Contact Checklist
+                  // Contact Checklist
                   if (emergencyProvider.contacts.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(16.0),
@@ -493,9 +493,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           return CheckboxListTile(
                             value: selectedContacts[contact.id] ?? true,
                             onChanged: (value) {
+                              // ✅ Updates the existing map
                               setState(() {
                                 selectedContacts[contact.id] = value ?? false;
                               });
+                              print(
+                                '📱 Contact ${contact.name} selected: ${value ?? false}',
+                              );
                             },
                             title: Text(contact.name),
                             subtitle: Text(contact.phone),
@@ -510,7 +514,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Divider(),
                   const SizedBox(height: 8),
 
-                  // ✅ Camera Toggle
+                  // Camera Toggle
                   Row(
                     children: [
                       const Icon(Icons.camera_alt, color: Colors.blue),
@@ -522,6 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           setState(() {
                             shareCamera = value;
                           });
+                          print('📷 Share Camera: $value');
                         },
                         activeColor: Colors.blue,
                       ),
@@ -530,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 4),
 
-                  // ✅ Video Toggle
+                  // Video Toggle
                   Row(
                     children: [
                       const Icon(Icons.videocam, color: Colors.purple),
@@ -542,6 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           setState(() {
                             shareVideo = value;
                           });
+                          print('📹 Share Video: $value');
                         },
                         activeColor: Colors.purple,
                       ),
@@ -550,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 8),
 
-                  // ✅ Selected contacts count - FIXED
+                  // Selected contacts count
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -589,6 +595,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _getSelectedCount(selectedContacts) == 0
                     ? null
                     : () {
+                        print('📱 Share Camera: $shareCamera');
+                        print('📱 Share Video: $shareVideo');
+                        print(
+                          '📱 Selected contacts: ${selectedContacts.values.where((v) => v).length}',
+                        );
                         Navigator.pop(context);
                         _activateSOS(selectedContacts, shareCamera, shareVideo);
                       },
