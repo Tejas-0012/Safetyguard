@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
+
+import 'firebase_options.dart';
 
 // Providers
 import 'providers/auth_provider.dart';
@@ -10,6 +11,7 @@ import 'providers/emergency_provider.dart';
 import 'providers/location_provider.dart';
 
 // Services
+import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
@@ -28,18 +30,35 @@ import 'screens/profile_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp();
-  // Initialize services
-  final apiService = ApiService();
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print('✅ Firebase initialized successfully!');
+  } catch (e) {
+    print('❌ Firebase initialization failed: $e');
+  }
+
+  // ✅ Create separate services
+  final authService = AuthService();
+  final apiService = ApiService(); // ✅ Create ApiService separately
   final locationService = LocationService();
   final smsService = SmsService();
-  await NotificationService.initialize();
+
+  try {
+    await NotificationService.initialize();
+  } catch (e) {
+    print('⚠️ NotificationService.initialize() failed: $e');
+  }
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider(apiService)),
-        ChangeNotifierProvider(create: (_) => EmergencyProvider(apiService)),
+        ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
+        ChangeNotifierProvider(
+          create: (_) => EmergencyProvider(apiService),
+        ), // ✅ Pass ApiService
         ChangeNotifierProvider(
           create: (_) => LocationProvider(locationService),
         ),
@@ -51,7 +70,7 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {

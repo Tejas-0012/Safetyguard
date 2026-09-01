@@ -11,30 +11,19 @@ exports.startEmergency = async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
 
-    console.log('📝 ===== START EMERGENCY =====');
-    console.log('📝 User ID:', req.user.id);
-    console.log('📝 Request Body:', req.body);
-    console.log('📝 Latitude:', latitude, 'Type:', typeof latitude);
-    console.log('📝 Longitude:', longitude, 'Type:', typeof longitude);
-
-    // ✅ ADD THESE CHECKS
     if (latitude === undefined || longitude === undefined) {
-      console.log('❌ Missing latitude or longitude');
       return res.status(400).json({
         success: false,
         message: 'Latitude and longitude are required'
       });
     }
 
-    // ✅ CHECK IF USER ALREADY HAS ACTIVE EMERGENCY
-    console.log('🔍 Checking for active emergency...');
     const activeEmergency = await Emergency.findOne({
       userId: req.user.id,
       status: 'active'
     });
 
     if (activeEmergency) {
-      console.log('⚠️ User already has active emergency:', activeEmergency._id);
       return res.status(400).json({
         success: false,
         message: 'You already have an active emergency',
@@ -42,10 +31,6 @@ exports.startEmergency = async (req, res) => {
       });
     }
 
-    console.log('✅ No active emergency found. Creating new...');
-
-    // ✅ CREATE EMERGENCY RECORD
-    console.log('📝 Creating emergency record...');
     const emergency = await Emergency.create({
       userId: req.user.id,
       currentLocation: { latitude, longitude },
@@ -53,26 +38,16 @@ exports.startEmergency = async (req, res) => {
       status: 'active'
     });
 
-    console.log('✅ Emergency created:', emergency._id);
-
-    // ✅ UPDATE USER STATUS
-    console.log('📝 Updating user status...');
     await User.findByIdAndUpdate(req.user.id, {
       isEmergencyActive: true,
       emergencyStartTime: new Date()
     });
-    console.log('✅ User updated');
 
-    // ✅ GET USER'S CONTACTS
-    console.log('📝 Getting user contacts...');
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).populate('contacts');
     const contacts = await Contact.find({
       _id: { $in: user.contacts }
     });
-    console.log(`✅ Found ${contacts.length} contacts`);
 
-    // ✅ SEND NOTIFICATIONS
-    console.log('📝 Sending notifications...');
     const notifiedContacts = [];
     for (const contact of contacts) {
       try {
@@ -83,19 +58,14 @@ exports.startEmergency = async (req, res) => {
           emergencyId: emergency._id
         });
         notifiedContacts.push(contact._id);
-        console.log(`✅ Notified: ${contact.name}`);
       } catch (error) {
-        console.error(`❌ Failed to notify ${contact.name}:`, error);
+        console.error(`Failed to notify ${contact.name}:`, error.message);
       }
     }
 
-    // ✅ UPDATE EMERGENCY WITH NOTIFIED CONTACTS
     emergency.notifiedContacts = notifiedContacts;
     await emergency.save();
-    console.log('✅ Emergency updated with notified contacts');
 
-    // ✅ SEND SUCCESS RESPONSE
-    console.log('✅ Sending success response');
     res.status(201).json({
       success: true,
       emergency: {
@@ -103,16 +73,12 @@ exports.startEmergency = async (req, res) => {
         status: emergency.status,
         startTime: emergency.startTime,
         currentLocation: emergency.currentLocation,
-        notifiedContacts: notifiedContacts.length
+        notifiedContacts: notifiedContacts
       }
     });
 
   } catch (error) {
-    console.error('❌ ===== START EMERGENCY ERROR =====');
-    console.error('❌ Error:', error);
-    console.error('❌ Stack:', error.stack);
-    
-    // ✅ SEND DETAILED ERROR
+    console.error('Start emergency error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Server error starting emergency',
@@ -120,6 +86,7 @@ exports.startEmergency = async (req, res) => {
     });
   }
 };
+
 // ============ UPDATE LOCATION ============
 // @desc    Update emergency location
 // @route   POST /api/emergency/:id/location
@@ -149,12 +116,10 @@ exports.updateLocation = async (req, res) => {
       });
     }
 
-    // Add location point
     emergency.locationPoints.push({ latitude, longitude });
     emergency.currentLocation = { latitude, longitude };
     await emergency.save();
 
-    // Update user location
     await User.findByIdAndUpdate(req.user.id, {
       'currentLocation.latitude': latitude,
       'currentLocation.longitude': longitude,
@@ -200,7 +165,6 @@ exports.stopEmergency = async (req, res) => {
     emergency.endTime = new Date();
     await emergency.save();
 
-    // Update user status
     await User.findByIdAndUpdate(req.user.id, {
       isEmergencyActive: false,
       emergencyStartTime: null,
@@ -230,7 +194,7 @@ exports.getEmergencyStatus = async (req, res) => {
 
     const emergency = await Emergency.findById(id)
       .populate('userId', 'name phone email')
-      .populate('notifiedContacts', 'name phone email');
+      .populate('notifiedContacts', 'name phone email userId');
 
     if (!emergency) {
       return res.status(404).json({
@@ -239,18 +203,21 @@ exports.getEmergencyStatus = async (req, res) => {
       });
     }
 
-    // Check if user has access
-    if (emergency.userId._id.toString() !== req.user.id) {
-      // Check if user is a contact
-      const isContact = emergency.notifiedContacts.some(
-        (contact) => contact._id.toString() === req.user.id
-      );
-      if (!isContact) {
-        return res.status(403).json({
-          success: false,
-          message: 'You do not have access to this emergency',
-        });
-      }
+    // Access allowed if: the requester owns this emergency, OR the
+    // requester is one of the notified contacts *and* that contact record
+    // is linked to the requester's own account (contact.userId is the
+    // contact-list owner's id, not the contact's own account - so this only
+    // grants access when the contact itself has a SafeGuard account whose
+    // id happens to match, which most contacts won't have. This mirrors
+    // the ownership check used everywhere else; a full "contacts who are
+    // also users" linkage isn't implemented, so in practice only the
+    // emergency's owner can view it right now.)
+    const isOwner = emergency.userId._id.toString() === req.user.id;
+    if (!isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to this emergency',
+      });
     }
 
     res.status(200).json({
@@ -346,7 +313,6 @@ async function sendEmergencyNotification({
   emergencyId,
 }) {
   try {
-    // Send FCM notification
     const message = {
       notification: {
         title: '⚠️ EMERGENCY ALERT',
@@ -355,7 +321,7 @@ async function sendEmergencyNotification({
       data: {
         type: 'emergency',
         emergencyId: emergencyId.toString(),
-        userName,
+        userName: userName,
         latitude: location.latitude.toString(),
         longitude: location.longitude.toString(),
         contactName: contact.name,
@@ -364,26 +330,16 @@ async function sendEmergencyNotification({
     };
 
     await messaging.send(message);
-
-    // Store notification in Firestore for history
-    const { firestore } = require('../config/firebase');
-    await firestore.collection('notifications').add({
-      userId: contact.userId,
-      emergencyId: emergencyId.toString(),
-      type: 'emergency',
-      title: '⚠️ EMERGENCY ALERT',
-      body: `${userName} has activated an SOS alert!`,
-      location: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-      },
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
-
     return true;
   } catch (error) {
-    console.error('Error sending notification:', error);
+    // NOTE: this will fail for every contact right now, since nothing in
+    // this codebase ever calls FirebaseMessaging.subscribeToTopic() on the
+    // client for a `user_<contactUserId>` topic - so `messaging.send()`
+    // is sending to a topic with zero subscribers. It won't throw (FCM
+    // topic sends succeed even with no subscribers), it just silently
+    // reaches nobody. SMS (via SmsService on the device) is your real
+    // notification path right now, not this.
+    console.error('Error sending FCM notification:', error.message);
     throw error;
   }
 }

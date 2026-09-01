@@ -1,30 +1,46 @@
-// This is a basic Flutter widget test.
+// Basic smoke test for the SafeGuard app.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// This replaces the default Flutter counter-app template, which referenced
+// widgets ('0', '1', a '+' icon) that don't exist in this project and would
+// always fail.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:safeguard/main.dart';
+import 'package:safeguard/providers/auth_provider.dart';
+import 'package:safeguard/providers/emergency_provider.dart';
+import 'package:safeguard/providers/location_provider.dart';
+import 'package:safeguard/services/auth_service.dart';
+import 'package:safeguard/services/api_service.dart';
+import 'package:safeguard/services/location_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('App boots and shows the splash screen', (
+    WidgetTester tester,
+  ) async {
+    final authService = AuthService();
+    final apiService = ApiService();
+    final locationService = LocationService();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Mirrors the provider setup in main.dart so screens that call
+    // Provider.of<...>() don't throw during the test.
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
+          ChangeNotifierProvider(create: (_) => EmergencyProvider(apiService)),
+          ChangeNotifierProvider(
+            create: (_) => LocationProvider(locationService),
+          ),
+        ],
+        child: const MyApp(),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Splash screen should render immediately, before the delayed navigation.
+    expect(find.text('SAFE GUARD'), findsOneWidget);
+    expect(find.text('Your Safety, Our Priority'), findsOneWidget);
   });
 }

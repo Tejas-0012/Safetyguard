@@ -1,4 +1,4 @@
-class User {
+class UserModel {
   final String id;
   final String name;
   final String phone;
@@ -10,7 +10,7 @@ class User {
   final List<String> contactIds;
   final DateTime? createdAt;
 
-  User({
+  UserModel({
     required this.id,
     required this.name,
     required this.phone,
@@ -23,8 +23,8 @@ class User {
     this.createdAt,
   });
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
       id: json['id'] ?? json['_id'] ?? '',
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',

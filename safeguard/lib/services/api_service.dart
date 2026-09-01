@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/constants.dart';
+
 class ApiService {
-  // static const String baseUrl = 'http://10.0.2.2:5000/api'; // Android emulator
-  static const String baseUrl = 'http://10.45.70.187:5000/api';
+  static const String baseUrl = AppConstants.baseUrl;
 
   final Dio _dio = Dio();
 

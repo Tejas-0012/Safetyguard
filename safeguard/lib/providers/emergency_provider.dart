@@ -72,6 +72,40 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateContact(
+    String id,
+    String name,
+    String phone, {
+    String? email,
+    String? relation,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final response = await _apiService.updateContact(id, {
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'relation': relation,
+      });
+
+      if (response['success'] == true) {
+        await loadContacts();
+        return true;
+      } else {
+        _error = response['message'] ?? 'Failed to update contact';
+        return false;
+      }
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> deleteContact(String id) async {
     try {
       _isLoading = true;

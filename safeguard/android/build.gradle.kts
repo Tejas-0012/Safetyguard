@@ -3,7 +3,13 @@ allprojects {
         google()
         mavenCentral()
     }
+    configurations.all {
+        resolutionStrategy {
+            force("org.checkerframework:checker-qual:3.42.0")
+        }
+    }
 }
+
 
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory

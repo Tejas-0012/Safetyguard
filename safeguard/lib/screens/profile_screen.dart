@@ -66,7 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     radius: 60,
                     backgroundColor: const Color(0xFF1A237E),
                     child: Text(
-                      user.name.substring(0, 1).toUpperCase(),
+                      user.name.isNotEmpty ? user.name.substring(0, 1).toUpperCase() : '?',
                       style: const TextStyle(
                         fontSize: 50,
                         fontWeight: FontWeight.bold,
@@ -199,11 +199,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _saveProfile() {
-    setState(() => _isEditing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully!')),
-    );
+  void _saveProfile() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.updateProfile({
+      'name': _nameController.text,
+      'phone': _phoneController.text,
+      'email': _emailController.text,
+    });
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() => _isEditing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully!')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(authProvider.error ?? 'Failed to update profile')),
+      );
+    }
   }
 
   void _logout(BuildContext context, AuthProvider authProvider) async {

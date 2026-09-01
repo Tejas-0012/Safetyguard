@@ -5,7 +5,9 @@ class SmsService {
   final Telephony _telephony = Telephony.instance;
 
   Future<bool> checkSmsPermission() async {
+    print('📱 Checking SMS permission...');
     final status = await Permission.sms.request();
+    print('📱 SMS permission status: $status');
     return status.isGranted;
   }
 
@@ -13,33 +15,27 @@ class SmsService {
     required String phoneNumber,
     required String message,
   }) async {
+    print('📱 ===== SENDING SMS =====');
+    print('📱 To: $phoneNumber');
+    print('📱 Message: $message');
+
     try {
       final hasPermission = await checkSmsPermission();
       if (!hasPermission) {
-        throw Exception('SMS permission not granted');
+        print('❌ SMS permission not granted');
+        return false;
       }
+
+      print('📱 Sending SMS via Telephony...');
 
       await _telephony.sendSms(to: phoneNumber, message: message);
 
+      print('✅ SMS sent successfully to $phoneNumber');
       return true;
     } catch (e) {
-      print('Error sending SMS: $e');
+      print('❌ Error sending SMS: $e');
       return false;
     }
-  }
-
-  Future<Map<String, bool>> sendBulkSms({
-    required List<String> phoneNumbers,
-    required String message,
-  }) async {
-    final results = <String, bool>{};
-
-    for (final phone in phoneNumbers) {
-      final success = await sendSms(phoneNumber: phone, message: message);
-      results[phone] = success;
-    }
-
-    return results;
   }
 
   Future<bool> sendEmergencyAlert({
@@ -50,6 +46,10 @@ class SmsService {
     required double longitude,
     required String emergencyId,
   }) async {
+    print('📱 ===== SENDING EMERGENCY SMS =====');
+    print('📱 Contact: $contactName');
+    print('📱 Phone: $contactPhone');
+
     final message =
         '''
 🚨 EMERGENCY ALERT
@@ -64,6 +64,6 @@ https://www.google.com/maps?q=$latitude,$longitude
 Please check the SafeGuard app for live updates.
     ''';
 
-    return await sendSms(phoneNumber: contactPhone, message: message);
+    return await sendSms(phoneNumber: contactPhone, message: message.trim());
   }
 }

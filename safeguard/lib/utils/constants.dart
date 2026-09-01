@@ -2,8 +2,15 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   // API
-  static const String baseUrl = 'http://10.0.2.2:5000/api'; // Android Emulator
-  // static const String baseUrl = 'http://localhost:5000/api'; // iOS
+  // Single source of truth for the backend URL — ApiService and AuthService
+  // both import this instead of hardcoding their own copy (previously they
+  // had 3 different values across 3 files, which silently drifted apart).
+  //
+  // Using your machine's LAN IP so a physical Android device (needed for
+  // real SMS sending) can reach the backend over WiFi. This changes if your
+  // machine reconnects to WiFi or DHCP reassigns it — check with `ipconfig`
+  // (Windows) and update here if requests start failing.
+  static const String baseUrl = 'http://10.246.18.187:5000/api';
 
   // Shared Preferences Keys
   static const String tokenKey = 'token';

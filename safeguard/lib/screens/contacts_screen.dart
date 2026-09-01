@@ -57,7 +57,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     leading: CircleAvatar(
                       backgroundColor: const Color(0xFF1A237E),
                       child: Text(
-                        contact.name.substring(0, 1).toUpperCase(),
+                        contact.name.isNotEmpty ? contact.name.substring(0, 1).toUpperCase() : '?',
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
@@ -314,10 +314,25 @@ class _ContactsScreenState extends State<ContactsScreen> {
       return;
     }
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Contact updated successfully!')),
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+    final success = await provider.updateContact(
+      id,
+      _nameController.text,
+      _phoneController.text,
+      email: _emailController.text.isNotEmpty ? _emailController.text : null,
+      relation: _selectedRelation,
     );
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(provider.error ?? 'Failed to update contact')),
+      );
+    } else {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contact updated successfully!')),
+      );
+    }
   }
 
   void _deleteContact(String id) async {

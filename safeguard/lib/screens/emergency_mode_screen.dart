@@ -10,7 +10,7 @@ import '../services/sms_service.dart';
 
 //hello check git hub
 class EmergencyModeScreen extends StatefulWidget {
-  const EmergencyModeScreen({Key? key}) : super(key: key);
+  const EmergencyModeScreen({super.key});
 
   @override
   State<EmergencyModeScreen> createState() => _EmergencyModeScreenState();
@@ -23,42 +23,54 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   bool _isCapturingImage = false;
   bool _isSendingSms = false;
 
+  LocationProvider? _locationProvider;
+  EmergencyProvider? _emergencyProvider;
+
   @override
   void initState() {
     super.initState();
     _setupEmergencyTracking();
   }
 
+  // Named listener so it can be removed in dispose(); an anonymous listener
+  // added and never removed lets setState() fire after this widget is
+  // disposed (crash) and leaks the listener.
+  void _onLocationChanged() {
+    final position = _locationProvider?.currentPosition;
+    if (position != null && _emergencyProvider?.currentEmergency != null) {
+      _updateLocation(position.latitude, position.longitude);
+      _updateMarker(LatLng(position.latitude, position.longitude));
+
+      _emergencyProvider!.updateEmergencyLocation(
+        _emergencyProvider!.currentEmergency!.id,
+        position.latitude,
+        position.longitude,
+      );
+    }
+  }
+
   void _setupEmergencyTracking() {
-    final locationProvider = Provider.of<LocationProvider>(
-      context,
-      listen: false,
-    );
-    final emergencyProvider = Provider.of<EmergencyProvider>(
+    _locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    _emergencyProvider = Provider.of<EmergencyProvider>(
       context,
       listen: false,
     );
 
-    if (!locationProvider.isTracking) {
-      locationProvider.startTracking();
+    if (!_locationProvider!.isTracking) {
+      _locationProvider!.startTracking();
     }
 
-    locationProvider.addListener(() {
-      final position = locationProvider.currentPosition;
-      if (position != null && emergencyProvider.currentEmergency != null) {
-        _updateLocation(position.latitude, position.longitude);
-        _updateMarker(LatLng(position.latitude, position.longitude));
+    _locationProvider!.addListener(_onLocationChanged);
+  }
 
-        emergencyProvider.updateEmergencyLocation(
-          emergencyProvider.currentEmergency!.id,
-          position.latitude,
-          position.longitude,
-        );
-      }
-    });
+  @override
+  void dispose() {
+    _locationProvider?.removeListener(_onLocationChanged);
+    super.dispose();
   }
 
   void _updateLocation(double lat, double lng) {
+    if (!mounted) return;
     setState(() {
       _locationUpdate =
           '📍 ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
@@ -66,6 +78,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   }
 
   void _updateMarker(LatLng position) {
+    if (!mounted) return;
     setState(() {
       _markers = {
         Marker(

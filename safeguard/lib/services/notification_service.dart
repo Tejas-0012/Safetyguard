@@ -53,7 +53,11 @@ class NotificationService {
       channelDescription: 'Notifications for emergency alerts',
       importance: Importance.max,
       priority: Priority.high,
-      sound: const RawResourceAndroidNotificationSound('emergency_sound'),
+      // NOTE: was referencing android/app/src/main/res/raw/emergency_sound,
+      // which doesn't exist in this project - using the system default
+      // sound. Add that raw resource file and restore
+      // `sound: const RawResourceAndroidNotificationSound('emergency_sound')`
+      // if you want a custom alert sound.
     );
 
     const iosDetails = DarwinNotificationDetails(
@@ -71,7 +75,6 @@ class NotificationService {
       id: 0,
       title: message.notification?.title,
       body: message.notification?.body,
-      notificationDetails: details,
       payload: message.data['emergencyId'],
     );
   }

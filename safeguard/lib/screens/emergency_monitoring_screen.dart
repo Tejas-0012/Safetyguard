@@ -5,7 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../providers/emergency_provider.dart';
 
 class EmergencyMonitoringScreen extends StatefulWidget {
-  const EmergencyMonitoringScreen({Key? key}) : super(key: key);
+  const EmergencyMonitoringScreen({super.key});
 
   @override
   State<EmergencyMonitoringScreen> createState() =>
@@ -14,7 +14,7 @@ class EmergencyMonitoringScreen extends StatefulWidget {
 
 class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
   late GoogleMapController _mapController;
-  Set<Marker> _markers = {};
+  final Set<Marker> _markers = {};
 
   @override
   Widget build(BuildContext context) {

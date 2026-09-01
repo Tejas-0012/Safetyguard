@@ -7,7 +7,7 @@ import 'register_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -18,26 +18,18 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _otpController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _isLoading = false;
   bool _otpSent = false;
   bool _isPhoneLogin = true;
   bool _obscurePassword = true;
 
+  final _formKey = GlobalKey<FormState>();
+
   @override
   void initState() {
     super.initState();
     _phoneController.text = '+91 ';
-    _checkAuth();
-  }
-
-  _checkAuth() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.isAuthenticated && mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
-    }
   }
 
   @override
@@ -82,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Sign in to continue to SafeGuard',
                   style: GoogleFonts.poppins(
                     fontSize: 16,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                 ),
 
@@ -91,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Login Method Toggle
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -103,13 +95,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               _isPhoneLogin = true;
                               _otpSent = false;
                               _otpController.clear();
+                              authProvider.resetPhoneVerification();
                             });
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
                               color: _isPhoneLogin
-                                  ? Colors.white.withOpacity(0.2)
+                                  ? Colors.white.withValues(alpha: 0.2)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -140,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
                               color: !_isPhoneLogin
-                                  ? Colors.white.withOpacity(0.2)
+                                  ? Colors.white.withValues(alpha: 0.2)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -164,50 +157,109 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // Phone Login
+                // ============ PHONE LOGIN ============
                 if (_isPhoneLogin) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: TextField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      enabled: !_otpSent,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Phone Number',
-                        labelStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: TextFormField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            enabled: !_otpSent,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Phone Number',
+                              labelStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.phone,
+                                color: Colors.white,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(16),
+                              hintText: '+91 XXXXX XXXXX',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your phone number';
+                              }
+                              final cleaned = value.replaceAll(
+                                RegExp(r'[^0-9]'),
+                                '',
+                              );
+                              if (cleaned.length < 10) {
+                                return 'Enter a valid 10-digit phone number';
+                              }
+                              return null;
+                            },
+                          ),
                         ),
-                        prefixIcon: const Icon(
-                          Icons.phone,
-                          color: Colors.white,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
-                        hintText: '+91 XXXXX XXXXX',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                        ),
-                      ),
+
+                        const SizedBox(height: 16),
+
+                        if (!_otpSent) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _checkAndSendOTP,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: const Color(0xFF0D47A1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFF0D47A1),
+                                      ),
+                                    )
+                                  : Text(
+                                      'SEND OTP',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
 
-                  const SizedBox(height: 16),
-
+                  // OTP Section
                   if (_otpSent) ...[
+                    const SizedBox(height: 16),
+
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                         ),
                       ),
-                      child: TextField(
+                      child: TextFormField(
                         controller: _otpController,
                         keyboardType: TextInputType.number,
                         maxLength: 6,
@@ -215,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'Enter OTP',
                           labelStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                           ),
                           prefixIcon: const Icon(
                             Icons.security,
@@ -228,7 +280,73 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _verifyOTPAndLogin,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      'VERIFY & LOGIN',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 56,
+                            child: OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _otpSent = false;
+                                  _otpController.clear();
+                                  final authProvider =
+                                      Provider.of<AuthProvider>(
+                                        context,
+                                        listen: false,
+                                      );
+                                  authProvider.resetPhoneVerification();
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Colors.white),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Text('BACK'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
 
                     GestureDetector(
                       onTap: () {
@@ -236,11 +354,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           _otpSent = false;
                           _otpController.clear();
                         });
+                        _resendOTP();
                       },
                       child: Text(
                         'Resend OTP?',
                         style: GoogleFonts.poppins(
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 14,
                           decoration: TextDecoration.underline,
                         ),
@@ -249,82 +368,150 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ],
 
-                // Email Login
+                // ============ EMAIL LOGIN ============
                 if (!_isPhoneLogin) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Email Address',
-                        labelStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                        prefixIcon: const Icon(
-                          Icons.email,
-                          color: Colors.white,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
-                        hintText: 'your@email.com',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        labelStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                        prefixIcon: const Icon(Icons.lock, color: Colors.white),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: Colors.white,
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
+                          child: TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Email Address',
+                              labelStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.email,
+                                color: Colors.white,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(16),
+                              hintText: 'your@email.com',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your email';
+                              }
+                              if (!value.contains('@') ||
+                                  !value.contains('.')) {
+                                return 'Enter a valid email address';
+                              }
+                              return null;
+                            },
+                          ),
                         ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(16),
-                      ),
+
+                        const SizedBox(height: 16),
+
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              labelStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.lock,
+                                color: Colors.white,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(16),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your password';
+                              }
+                              if (value.length < 6) {
+                                return 'Password must be at least 6 characters';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _loginWithEmail,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF0D47A1),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF0D47A1),
+                                    ),
+                                  )
+                                : Text(
+                                    'LOGIN',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
 
+                // Error Message
                 if (authProvider.error != null) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.2),
+                      color: Colors.red.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -350,52 +537,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading || authProvider.isLoading
-                        ? null
-                        : () => _handleLogin(authProvider),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF0D47A1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 5,
-                    ),
-                    child: _isLoading || authProvider.isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF0D47A1),
-                            ),
-                          )
-                        : Text(
-                            _isPhoneLogin
-                                ? (_otpSent ? 'VERIFY OTP' : 'SEND OTP')
-                                : 'LOGIN',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
+                // Register Option
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'New user? ',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 14,
                       ),
                     ),
@@ -428,82 +577,181 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _handleLogin(AuthProvider authProvider) async {
+  // ============ PHONE LOGIN METHODS ============
+
+  void _checkAndSendOTP() async {
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     authProvider.clearError();
 
     try {
-      if (_isPhoneLogin) {
-        if (!_otpSent) {
-          if (_phoneController.text.isEmpty) {
-            _showSnackBar('Please enter your phone number');
-            setState(() => _isLoading = false);
-            return;
-          }
-          await Future.delayed(const Duration(seconds: 1));
-          setState(() {
-            _otpSent = true;
-            _isLoading = false;
-          });
-          _showSnackBar('OTP sent to your phone!');
-          return;
-        }
+      // Clean phone number
+      String phone = _phoneController.text.trim();
+      phone = phone.replaceAll('+91 ', '');
+      phone = phone.replaceAll('+91', '');
+      phone = phone.replaceAll(' ', '');
+      phone = phone.replaceAll('-', '');
+      phone = '+91$phone';
 
-        if (_otpController.text.isEmpty) {
-          _showSnackBar('Please enter the OTP');
+      // Check if phone exists
+      final exists = await authProvider.checkPhoneExists(phone);
+
+      if (!exists) {
+        setState(() => _isLoading = false);
+        _showSnackBar('Phone not registered. Please register first.');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const RegisterScreen()),
+        );
+        return;
+      }
+
+      // Send OTP via Firebase
+      final success = await authProvider.sendOTP(phone);
+
+      setState(() => _isLoading = false);
+
+      if (success) {
+        setState(() => _otpSent = true);
+        _showSnackBar('✅ OTP sent to your phone!');
+      } else if (authProvider.error != null) {
+        _showSnackBar(authProvider.error!);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Error: ${e.toString()}');
+    }
+  }
+
+  void _verifyOTPAndLogin() async {
+    if (_otpController.text.isEmpty) {
+      _showSnackBar('Please enter the OTP');
+      return;
+    }
+
+    if (_otpController.text.length != 6) {
+      _showSnackBar('Please enter a 6-digit OTP');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    authProvider.clearError();
+
+    try {
+      // Verify OTP with Firebase
+      final verified = await authProvider.verifyOTP(_otpController.text);
+
+      if (verified && authProvider.isPhoneVerified) {
+        // Login with phone
+        final phone = authProvider.pendingPhone;
+        if (phone != null) {
+          final success = await authProvider.loginWithPhone(phone);
+
           setState(() => _isLoading = false);
-          return;
-        }
 
-        await Future.delayed(const Duration(seconds: 1));
-        if (_otpController.text == '123456') {
-          final success = await authProvider.loginWithPhone(
-            _phoneController.text,
-            _otpController.text,
-          );
           if (success && mounted) {
+            _showSnackBar('✅ Login successful!', isSuccess: true);
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => const HomeScreen()),
             );
+          } else if (authProvider.error != null) {
+            _showSnackBar(authProvider.error!);
           }
         } else {
-          _showSnackBar('Invalid OTP. Try 123456 for demo.');
-        }
-      } else {
-        if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-          _showSnackBar('Please enter email and password');
           setState(() => _isLoading = false);
-          return;
+          _showSnackBar('Phone number not found');
         }
-
-        final success = await authProvider.login(
-          _emailController.text,
-          _passwordController.text,
-        );
-
-        if (success && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
-        }
+      } else if (authProvider.error != null) {
+        setState(() => _isLoading = false);
+        _showSnackBar(authProvider.error!);
       }
     } catch (e) {
-      _showSnackBar('Login failed: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
+      _showSnackBar('Verification failed: ${e.toString()}');
     }
   }
 
-  void _showSnackBar(String message) {
+  void _resendOTP() async {
+    setState(() => _isLoading = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    authProvider.clearError();
+
+    try {
+      // Clean phone number
+      String phone = _phoneController.text.trim();
+      phone = phone.replaceAll('+91 ', '');
+      phone = phone.replaceAll('+91', '');
+      phone = phone.replaceAll(' ', '');
+      phone = phone.replaceAll('-', '');
+      phone = '+91$phone';
+
+      final success = await authProvider.sendOTP(phone);
+
+      setState(() => _isLoading = false);
+
+      if (success) {
+        setState(() => _otpSent = true);
+        _showSnackBar('✅ OTP resent to your phone!');
+      } else if (authProvider.error != null) {
+        _showSnackBar(authProvider.error!);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Error: ${e.toString()}');
+    }
+  }
+
+  // ============ EMAIL LOGIN METHOD ============
+
+  void _loginWithEmail() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    authProvider.clearError();
+
+    try {
+      final success = await authProvider.loginWithEmail(
+        _emailController.text.trim().toLowerCase(),
+        _passwordController.text,
+      );
+
+      setState(() => _isLoading = false);
+
+      if (success && mounted) {
+        _showSnackBar('✅ Login successful!', isSuccess: true);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else if (authProvider.error != null) {
+        _showSnackBar(authProvider.error!);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Login failed: ${e.toString()}');
+    }
+  }
+
+  // ============ HELPER ============
+
+  void _showSnackBar(String message, {bool isSuccess = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: message.contains('success')
+        backgroundColor: isSuccess || message.contains('sent')
             ? Colors.green
             : Colors.red,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: isSuccess ? 2 : 3),
       ),
     );
   }

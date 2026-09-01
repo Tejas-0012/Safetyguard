@@ -1,13 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { body } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const {
   register,
   login,
+  checkPhone,
+  getUserByPhone,
   verifyFirebase,
 } = require('../controllers/authController');
 
-// Validation rules
+// ============ VALIDATION RULES ============
+
 const validateRegister = [
   body('name').notEmpty().withMessage('Name is required'),
   body('phone').notEmpty().withMessage('Phone number is required'),
@@ -22,9 +25,28 @@ const validateLogin = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
-// Routes
-router.post('/register', validateRegister, register);
-router.post('/login', validateLogin, login);
+// express-validator's body() checks only collect errors on req; nothing
+// rejects the request unless something reads validationResult(req) and
+// responds. This middleware is that missing step - without it the rules
+// above are declared but never enforced.
+const validate = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: errors.array()[0].msg,
+      errors: errors.array(),
+    });
+  }
+  next();
+};
+
+// ============ ROUTES ============
+
+router.post('/register', validateRegister, validate, register);
+router.post('/login', validateLogin, validate, login);
 router.post('/verify-firebase', verifyFirebase);
+router.post('/check-phone', checkPhone);
+router.post('/user-by-phone', getUserByPhone);
 
 module.exports = router;

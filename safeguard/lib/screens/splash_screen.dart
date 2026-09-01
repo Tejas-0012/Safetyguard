@@ -7,7 +7,7 @@ import 'login_screen.dart';
 import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -44,7 +44,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _animationController.forward();
 
-    _navigateToNext();
+    _checkAuth();
   }
 
   @override
@@ -53,20 +53,24 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  _navigateToNext() async {
+  void _checkAuth() async {
     await Future.delayed(const Duration(seconds: 3));
 
     if (mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final isAuthenticated = authProvider.isAuthenticated;
+      await authProvider.checkAuthStatus();
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              isAuthenticated ? const HomeScreen() : const LoginScreen(),
-        ),
-      );
+      if (authProvider.isAuthenticated && mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
   }
 
@@ -81,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF1A237E).withOpacity(0.9),
+              const Color(0xFF1A237E).withValues(alpha: 0.9),
               const Color(0xFF0D47A1),
               const Color(0xFF01579B),
             ],
@@ -91,7 +95,6 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Shield Icon
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
@@ -100,11 +103,11 @@ class _SplashScreenState extends State<SplashScreen>
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 30,
                           spreadRadius: 10,
                         ),
@@ -118,10 +121,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
               ),
-
               const SizedBox(height: 40),
-
-              // App Name
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Text(
@@ -133,7 +133,7 @@ class _SplashScreenState extends State<SplashScreen>
                     letterSpacing: 3,
                     shadows: [
                       Shadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 10,
                         offset: const Offset(2, 2),
                       ),
@@ -141,10 +141,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
               ),
-
               const SizedBox(height: 10),
-
-              // Tagline
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: Text(
@@ -152,15 +149,12 @@ class _SplashScreenState extends State<SplashScreen>
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w300,
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     letterSpacing: 1,
                   ),
                 ),
               ),
-
               const SizedBox(height: 60),
-
-              // Loading Indicator
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: const SizedBox(

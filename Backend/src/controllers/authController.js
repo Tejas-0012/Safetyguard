@@ -1,51 +1,27 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { validationResult } = require('express-validator');
 const { firebaseAuth } = require('../config/firebase');
 
 // Generate JWT Token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '7d',
+    expiresIn: process.env.JWT_EXPIRE
   });
 };
 
-// ============ REGISTER ============
-// @desc    Register a new user
+// @desc    Register User
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res) => {
   try {
-    // ✅ LOG FULL REQUEST
-    console.log('📝 ===== REGISTRATION ATTEMPT =====');
-    console.log('📝 Request Body:', JSON.stringify(req.body, null, 2));
-    console.log('📝 Headers:', req.headers);
-
-    // Validate input
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      console.log('❌ Validation Errors:', JSON.stringify(errors.array(), null, 2));
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
     const { name, phone, email, password } = req.body;
 
-    // ✅ LOG CLEANED DATA
-    console.log('📝 Cleaned Data:', { name, phone, email, password: '***' });
-
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { phone }],
-    });
-
+    // Check if user exists
+    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
-      console.log('❌ User already exists:', { email, phone });
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email or phone',
+        message: 'User already exists with this email or phone'
       });
     }
 
@@ -53,52 +29,45 @@ exports.register = async (req, res) => {
     const user = await User.create({
       name,
       phone,
-      email: email.toLowerCase(),
-      password,
+      email,
+      password
     });
 
-    console.log('✅ User created successfully:', user._id);
-
+    // Generate token
     const token = generateToken(user._id);
 
     res.status(201).json({
       success: true,
       token,
-      user,
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        isEmergencyActive: user.isEmergencyActive
+      }
     });
   } catch (error) {
-    console.error('❌ ===== REGISTRATION ERROR =====');
-    console.error('❌ Error:', error);
-    console.error('❌ Error Stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error during registration',
+      message: error.message
     });
   }
 };
-// ============ LOGIN ============
-// @desc    Login user
+
+// @desc    Login User
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        errors: errors.array(),
-      });
-    }
-
     const { email, password } = req.body;
 
-    // Find user with password
-    const user = await User.findOne({ email }).select('+password');
-
+    // Check if user exists
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
+        message: 'Invalid credentials'
       });
     }
 
@@ -107,7 +76,7 @@ exports.login = async (req, res) => {
     if (!isPasswordMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
+        message: 'Invalid credentials'
       });
     }
 
@@ -117,38 +86,142 @@ exports.login = async (req, res) => {
     res.status(200).json({
       success: true,
       token,
-      user,
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        isEmergencyActive: user.isEmergencyActive
+      }
     });
   } catch (error) {
-    console.error('Login error:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error during login',
+      message: error.message
     });
   }
 };
 
-// ============ VERIFY FIREBASE ============
-// @desc    Verify Firebase token
+// @desc    Check if a phone number is already registered
+// @route   POST /api/auth/check-phone
+// @access  Public
+exports.checkPhone = async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required'
+      });
+    }
+
+    const user = await User.findOne({ phone });
+    res.status(200).json({
+      success: true,
+      exists: !!user
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Log in a user via a phone number that's already been verified
+//          through Firebase OTP on the client. Requires the Firebase ID
+//          token (not just a bare phone number) so the server can verify
+//          the phone was actually proven, not just claimed.
+// @route   POST /api/auth/user-by-phone
+// @access  Public (but requires a valid, freshly-issued Firebase ID token)
+exports.getUserByPhone = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Firebase ID token is required'
+      });
+    }
+
+    const decodedToken = await firebaseAuth.verifyIdToken(idToken);
+    const { uid, phone_number } = decodedToken;
+
+    if (!phone_number) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verified token has no associated phone number'
+      });
+    }
+
+    // Match by firebaseUid first (returning user), then fall back to
+    // matching by the verified phone number and linking the firebaseUid
+    // (e.g. a user who originally registered with email/password logging
+    // in by phone for the first time) - avoids creating a duplicate account.
+    let user = await User.findOne({ firebaseUid: uid });
+    if (!user) {
+      user = await User.findOne({ phone: phone_number });
+      if (user && !user.firebaseUid) {
+        user.firebaseUid = uid;
+        await user.save();
+      }
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found for this phone number. Please register first.'
+      });
+    }
+
+    const token = generateToken(user._id);
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        isEmergencyActive: user.isEmergencyActive
+      }
+    });
+  } catch (error) {
+    // Covers expired/invalid/tampered ID tokens
+    res.status(401).json({
+      success: false,
+      message: 'Invalid or expired verification. Please try again.'
+    });
+  }
+};
+
+// @desc    Verify Firebase Token
 // @route   POST /api/auth/verify-firebase
 // @access  Public
 exports.verifyFirebase = async (req, res) => {
   try {
     const { firebaseToken } = req.body;
 
-    if (!firebaseToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Firebase token is required',
-      });
-    }
-
     // Verify Firebase token
     const decodedToken = await firebaseAuth.verifyIdToken(firebaseToken);
     const { uid, email, phone_number, name } = decodedToken;
 
-    // Check if user exists
+    // Check if user exists by firebaseUid, then fall back to matching by
+    // phone/email (links this Firebase identity to an existing account
+    // instead of creating a duplicate one).
     let user = await User.findOne({ firebaseUid: uid });
+
+    if (!user && phone_number) {
+      user = await User.findOne({ phone: phone_number });
+    }
+    if (!user && email) {
+      user = await User.findOne({ email });
+    }
+
+    if (user && !user.firebaseUid) {
+      user.firebaseUid = uid;
+      await user.save();
+    }
 
     if (!user) {
       // Create new user
@@ -157,7 +230,7 @@ exports.verifyFirebase = async (req, res) => {
         name: name || 'User',
         email: email || '',
         phone: phone_number || '',
-        password: Math.random().toString(36).slice(-8), // Random password
+        password: Math.random().toString(36).slice(-8) // Random password
       });
     }
 
@@ -167,13 +240,18 @@ exports.verifyFirebase = async (req, res) => {
     res.status(200).json({
       success: true,
       token,
-      user,
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        isEmergencyActive: user.isEmergencyActive
+      }
     });
   } catch (error) {
-    console.error('Firebase verification error:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Firebase verification failed',
+      message: error.message
     });
   }
 };
