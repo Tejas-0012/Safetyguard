@@ -2,6 +2,7 @@ const Emergency = require('../models/Emergency');
 const User = require('../models/User');
 const Contact = require('../models/Contact');
 const { messaging } = require('../config/firebase');
+const crypto = require('crypto');
 
 // ============ START EMERGENCY ============
 // @desc    Start emergency
@@ -194,7 +195,7 @@ exports.getEmergencyStatus = async (req, res) => {
 
     const emergency = await Emergency.findById(id)
       .populate('userId', 'name phone email')
-      .populate('notifiedContacts', 'name phone email userId');
+      .populate('notifiedContacts', 'name phone');
 
     if (!emergency) {
       return res.status(404).json({
@@ -203,17 +204,13 @@ exports.getEmergencyStatus = async (req, res) => {
       });
     }
 
-    // Access allowed if: the requester owns this emergency, OR the
-    // requester is one of the notified contacts *and* that contact record
-    // is linked to the requester's own account (contact.userId is the
-    // contact-list owner's id, not the contact's own account - so this only
-    // grants access when the contact itself has a SafeGuard account whose
-    // id happens to match, which most contacts won't have. This mirrors
-    // the ownership check used everywhere else; a full "contacts who are
-    // also users" linkage isn't implemented, so in practice only the
-    // emergency's owner can view it right now.)
-    const isOwner = emergency.userId._id.toString() === req.user.id;
-    if (!isOwner) {
+    // Check if user is the sender OR a notified contact
+    const isSender = emergency.userId._id.toString() === req.user.id;
+    const isContact = emergency.notifiedContacts.some(
+      contact => contact._id.toString() === req.user.id
+    );
+
+    if (!isSender && !isContact) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this emergency',
@@ -223,6 +220,7 @@ exports.getEmergencyStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       emergency,
+      role: isSender ? 'sender' : 'receiver'
     });
   } catch (error) {
     console.error('Get emergency error:', error);
@@ -305,6 +303,244 @@ exports.addImage = async (req, res) => {
   }
 };
 
+// ============ ✅ NEW: RECEIVER REPLY ============
+// @desc    Receiver replies to emergency
+// @route   POST /api/emergency/:id/reply
+// @access  Private
+exports.replyToEmergency = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reply message is required'
+      });
+    }
+
+    const emergency = await Emergency.findById(id);
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found'
+      });
+    }
+
+    // Check if user is a notified contact
+    const isContact = emergency.notifiedContacts.some(
+      contactId => contactId.toString() === req.user.id
+    );
+
+    if (!isContact && emergency.userId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to reply'
+      });
+    }
+
+    // Get user name
+    const user = await User.findById(req.user.id);
+    const contactName = user ? user.name : 'Contact';
+
+    // Add reply
+    emergency.receiverReplies.push({
+      contactId: req.user.id,
+      contactName: contactName,
+      message: message
+    });
+    await emergency.save();
+
+    // ✅ Notify the sender via FCM
+    const sender = await User.findById(emergency.userId);
+    if (sender) {
+      try {
+        await messaging.send({
+          notification: {
+            title: '📩 Reply from Contact',
+            body: `${contactName} says: "${message}"`,
+          },
+          data: {
+            type: 'reply',
+            emergencyId: emergency._id.toString(),
+            contactName: contactName,
+            message: message
+          },
+          topic: `user_${sender._id}`
+        });
+      } catch (fcmError) {
+        console.log('FCM notify sender error:', fcmError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      reply: {
+        contactName: contactName,
+        message: message,
+        repliedAt: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Reply error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ============ ✅ NEW: GENERATE WEB STREAM URL ============
+// @desc    Generate web stream URL for non-app users
+// @route   POST /api/emergency/:id/web-stream
+// @access  Private (Contact only)
+exports.generateWebStream = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const emergency = await Emergency.findById(id)
+      .populate('userId', 'name phone email')
+      .populate('notifiedContacts', 'name phone');
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found'
+      });
+    }
+
+    // Check if user is a notified contact
+    const isContact = emergency.notifiedContacts.some(
+      contact => contact._id.toString() === req.user.id
+    );
+
+    if (!isContact) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to view this emergency'
+      });
+    }
+
+    // Generate unique token for web access
+    const token = crypto.randomBytes(32).toString('hex');
+    emergency.webStreamToken = token;
+    emergency.isWebStreamActive = true;
+    await emergency.save();
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const webUrl = `${baseUrl}/receiver/${token}`;
+
+    res.status(200).json({
+      success: true,
+      webUrl: webUrl,
+      token: token
+    });
+  } catch (error) {
+    console.error('Web stream error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ============ ✅ NEW: GET EMERGENCY DETAILS FOR WEB ============
+// @desc    Get emergency details for web viewer
+// @route   GET /api/emergency/web/:token
+// @access  Public (via token)
+exports.getEmergencyByToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const emergency = await Emergency.findOne({ webStreamToken: token })
+      .populate('userId', 'name phone')
+      .populate('notifiedContacts', 'name phone');
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link'
+      });
+    }
+
+    if (emergency.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Emergency has ended'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      emergency: {
+        id: emergency._id,
+        userName: emergency.userId ? emergency.userId.name : 'Unknown',
+        userPhone: emergency.userId ? emergency.userId.phone : 'No phone',
+        startTime: emergency.startTime,
+        status: emergency.status,
+        currentLocation: emergency.currentLocation,
+        locationPoints: emergency.locationPoints.slice(-30),
+        cameraImages: emergency.cameraImages,
+        isVideoActive: emergency.isVideoActive,
+        receiverReplies: emergency.receiverReplies || []
+      }
+    });
+  } catch (error) {
+    console.error('Web details error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ============ ✅ NEW: GET EMERGENCY DETAILS FOR APP ============
+// @desc    Get emergency details for app user
+// @route   GET /api/emergency/:id/details
+// @access  Private
+exports.getEmergencyDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const emergency = await Emergency.findById(id)
+      .populate('userId', 'name phone email')
+      .populate('notifiedContacts', 'name phone')
+      .populate('receiverReplies.contactId', 'name phone');
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found'
+      });
+    }
+
+    // Check if user is the sender or a notified contact
+    const isSender = emergency.userId._id.toString() === req.user.id;
+    const isContact = emergency.notifiedContacts.some(
+      contact => contact._id.toString() === req.user.id
+    );
+
+    if (!isSender && !isContact) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to view this emergency'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      emergency,
+      role: isSender ? 'sender' : 'receiver'
+    });
+  } catch (error) {
+    console.error('Get details error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // ============ HELPER: Send Emergency Notification ============
 async function sendEmergencyNotification({
   contact,
@@ -330,16 +566,11 @@ async function sendEmergencyNotification({
     };
 
     await messaging.send(message);
+    console.log(`✅ FCM notification sent to ${contact.name}`);
     return true;
   } catch (error) {
-    // NOTE: this will fail for every contact right now, since nothing in
-    // this codebase ever calls FirebaseMessaging.subscribeToTopic() on the
-    // client for a `user_<contactUserId>` topic - so `messaging.send()`
-    // is sending to a topic with zero subscribers. It won't throw (FCM
-    // topic sends succeed even with no subscribers), it just silently
-    // reaches nobody. SMS (via SmsService on the device) is your real
-    // notification path right now, not this.
     console.error('Error sending FCM notification:', error.message);
-    throw error;
+    // Don't throw - just log the error
+    return false;
   }
 }

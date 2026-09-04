@@ -19,6 +19,24 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late GoogleMapController _mapController;
+  String _cleanPhoneNumber(String phone) {
+    // Remove all spaces and special characters
+    String cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Remove leading zero if present
+    if (cleaned.startsWith('0')) {
+      cleaned = cleaned.substring(1);
+    }
+
+    // Add +91 if missing
+    if (!cleaned.startsWith('91')) {
+      cleaned = '+91$cleaned';
+    } else if (!cleaned.startsWith('+')) {
+      cleaned = '+$cleaned';
+    }
+
+    return cleaned;
+  }
 
   @override
   void initState() {
@@ -630,6 +648,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     print('🔴 ===== ACTIVATE SOS CALLED =====');
     print('📱 Selected contacts: ${selectedContacts.length}');
+
     final locationProvider = Provider.of<LocationProvider>(
       context,
       listen: false,
@@ -640,7 +659,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     final smsService = Provider.of<SmsService>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
     print('📱 SmsService obtained: ${smsService != null}');
+
+    // ✅ GET USER FIRST
+    final user = authProvider.user;
+    if (user == null) {
+      print('❌ User is null - not logged in');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User not logged in. Please login again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final position = locationProvider.currentPosition;
 
     if (position == null) {
@@ -653,7 +687,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
+
     print('📍 Position: ${position.latitude}, ${position.longitude}');
+
     // Get selected contact details
     List<EmergencyContact> selectedContactList = [];
     for (var contact in emergencyProvider.contacts) {
@@ -672,7 +708,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // ✅ Show loading
+    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -713,17 +749,37 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      // ✅ GET EMERGENCY AFTER STARTING IT
+      final emergency = emergencyProvider.currentEmergency;
+      if (emergency == null) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Emergency not found after creation'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       // 2. Send SMS to selected contacts (Telephony)
       int smsSent = 0;
       for (var contact in selectedContactList) {
         try {
-          final result = await smsService.sendSms(
-            phoneNumber: contact.phone,
-            message: 'Hi, its EMERGENCY! Please check the SafeGuard app for my live location.',
+          final phoneNumber = _cleanPhoneNumber(contact.phone);
+          print('📱 Cleaned phone: $phoneNumber');
+          // ✅ USE THE sendEmergencyAlert METHOD
+          final result = await smsService.sendEmergencyAlert(
+            contactName: contact.name,
+            contactPhone: phoneNumber,
+            userName: user.name,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            emergencyId: emergency.id,
           );
           if (result) {
             smsSent++;
-            print('✅ SMS sent to ${contact.name} (${contact.phone})');
+            print('✅ SMS sent to ${contact.name} (${phoneNumber})');
           } else {
             print('❌ SMS failed to ${contact.name}');
           }

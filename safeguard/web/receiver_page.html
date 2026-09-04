@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SafeGuard - Emergency Monitoring</title>
+    <!-- Google Maps API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+        
+        body {
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a237e, #0d47a1);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .header .status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status.active {
+            background: #ff1744;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status.resolved {
+            background: #00c853;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+        
+        .sender-info {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .sender-info .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #e3f2fd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            color: #1a237e;
+        }
+        
+        .sender-info .details {
+            flex: 1;
+        }
+        
+        .sender-info .details .name {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .sender-info .details .phone {
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .map-container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 400px;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .info-card {
+            background: white;
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .info-card .label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .info-card .value {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+        
+        .images-container {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .images-container h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+        }
+        
+        .image-grid img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 2px solid #eee;
+        }
+        
+        .image-grid img:hover {
+            border-color: #1a237e;
+            transform: scale(1.02);
+            transition: all 0.2s;
+        }
+        
+        .reply-section {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+        
+        .reply-section h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        
+        .reply-input {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .reply-input input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 2px solid #ddd;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .reply-input input:focus {
+            border-color: #1a237e;
+        }
+        
+        .reply-input button {
+            padding: 10px 20px;
+            background: #1a237e;
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .reply-input button:hover {
+            background: #0d47a1;
+        }
+        
+        .replies-list {
+            margin-top: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .reply-item {
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        
+        .reply-item .sender {
+            font-weight: 600;
+            color: #1a237e;
+        }
+        
+        .reply-item .time {
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #eee;
+            border-top-color: #1a237e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 12px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 600px) {
+            .map-container { height: 250px; }
+            .info-grid { grid-template-columns: 1fr 1fr; }
+            .image-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+            .image-grid img { height: 80px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ SafeGuard</h1>
+        <span class="status active" id="statusBadge">● ACTIVE</span>
+    </div>
+
+    <div class="container" id="app">
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span>Loading emergency data...</span>
+        </div>
+
+        <!-- Content (hidden initially) -->
+        <div id="content" style="display: none;">
+            <!-- Sender Info -->
+            <div class="sender-info" id="senderInfo">
+                <div class="avatar" id="avatar">U</div>
+                <div class="details">
+                    <div class="name" id="senderName">User Name</div>
+                    <div class="phone" id="senderPhone">📱 +91 98765 43210</div>
+                </div>
+                <div style="font-size: 13px; color: #666;" id="startedAt">Started: --:--</div>
+            </div>
+
+            <!-- Map -->
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+
+            <!-- Info Grid -->
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="label">Status</div>
+                    <div class="value" id="statusValue" style="color: #ff1744;">🔴 Active</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Duration</div>
+                    <div class="value" id="durationValue">00:00</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Location Updates</div>
+                    <div class="value" id="updateCount">0</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Images</div>
+                    <div class="value" id="imageCount">0</div>
+                </div>
+            </div>
+
+            <!-- Images -->
+            <div class="images-container" id="imagesContainer" style="display: none;">
+                <h3>📸 Emergency Images</h3>
+                <div class="image-grid" id="imageGrid"></div>
+            </div>
+
+            <!-- Reply Section -->
+            <div class="reply-section" id="replySection">
+                <h3>💬 Send Reply</h3>
+                <div class="reply-input">
+                    <input type="text" id="replyInput" placeholder="Type 'I'm coming' or any message..." />
+                    <button id="sendReplyBtn">Send</button>
+                </div>
+                <div class="replies-list" id="repliesList">
+                    <!-- Replies will appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/receiver.js"></script>
+</body>
+</html>

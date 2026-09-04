@@ -213,6 +213,29 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ NEW METHODS
+
+  Future<Map<String, dynamic>> replyToEmergency(
+    String emergencyId,
+    String message,
+  ) async {
+    try {
+      final response = await _apiService.replyToEmergency(emergencyId, message);
+      return response;
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> generateWebStream(String emergencyId) async {
+    try {
+      final response = await _apiService.generateWebStream(emergencyId);
+      return response;
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   Future<void> refreshEmergencyStatus(String emergencyId) async {
     try {
       final response = await _apiService.getEmergencyStatus(emergencyId);

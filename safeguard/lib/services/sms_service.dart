@@ -49,7 +49,24 @@ class SmsService {
     print('📱 ===== SENDING EMERGENCY SMS =====');
     print('📱 Contact: $contactName');
     print('📱 Phone: $contactPhone');
+    final lat = latitude;
+    final long = longitude;
+    final name = userName;
+    final id = emergencyId;
+    final message = '''EMERGENCY ALERT $name has activated an SOS alert! 
+        Current Location:https://www.google.com/maps?q=$lat,$long ''';
+    return await sendSms(phoneNumber: contactPhone, message: message.trim());
+  }
 
+  Future<bool> sendEmergencyAlertWithWebLink({
+    required String contactName,
+    required String contactPhone,
+    required String userName,
+    required double latitude,
+    required double longitude,
+    required String emergencyId,
+    required String webUrl,
+  }) async {
     final message =
         '''
 🚨 EMERGENCY ALERT
@@ -59,11 +76,31 @@ $userName has activated an SOS alert!
 📍 Current Location:
 https://www.google.com/maps?q=$latitude,$longitude
 
-🆘 Emergency ID: $emergencyId
+🔴 View Live Location & Images:
+$webUrl
+
+Reply "I'm coming" to let them know!
 
 Please check the SafeGuard app for live updates.
     ''';
 
     return await sendSms(phoneNumber: contactPhone, message: message.trim());
+  }
+
+  // ✅ NEW: Listen for incoming SMS replies
+  void listenForReplies(Function(String sender, String message) onReply) {
+    _telephony.listenIncomingSms(
+      onNewMessage: (SmsMessage message) {
+        final sender = message.address ?? 'Unknown'; // ✅ 'address' not 'sender'
+        final body = message.body ?? '';
+        print('📩 SMS Received from: ${sender}');
+        print('📩 Message: ${message.body}');
+
+        // Check if message is a reply to emergency
+        if (message.body?.toLowerCase().contains('coming') == true) {
+          onReply(sender!, message.body!);
+        }
+      },
+    );
   }
 }

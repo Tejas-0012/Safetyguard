@@ -128,4 +128,20 @@ class ApiService {
     final response = await _dio.post('/emergency/$id/image', data: data);
     return response.data;
   }
+
+  Future<Map<String, dynamic>> replyToEmergency(
+    String id,
+    String message,
+  ) async {
+    final response = await _dio.post(
+      '/emergency/$id/reply',
+      data: {'message': message},
+    );
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> generateWebStream(String id) async {
+    final response = await _dio.post('/emergency/$id/web-stream');
+    return response.data;
+  }
 }

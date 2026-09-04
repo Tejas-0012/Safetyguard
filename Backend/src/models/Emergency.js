@@ -36,6 +36,26 @@ const EmergencyImageSchema = new mongoose.Schema({
   },
 });
 
+// ✅ Sub-schema for receiver replies
+const ReceiverReplySchema = new mongoose.Schema({
+  contactId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Contact',
+  },
+  contactName: {
+    type: String,
+    default: '',
+  },
+  message: {
+    type: String,
+    required: [true, 'Reply message is required'],
+  },
+  repliedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 const EmergencySchema = new mongoose.Schema(
   {
     userId: {
@@ -72,6 +92,16 @@ const EmergencySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // ✅ NEW FIELDS
+    receiverReplies: [ReceiverReplySchema],
+    isWebStreamActive: {
+      type: Boolean,
+      default: false,
+    },
+    webStreamToken: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,
@@ -81,6 +111,7 @@ const EmergencySchema = new mongoose.Schema(
 // Indexes for better performance
 EmergencySchema.index({ userId: 1, status: 1 });
 EmergencySchema.index({ startTime: -1 });
+EmergencySchema.index({ webStreamToken: 1 });
 
 // Virtual for duration
 EmergencySchema.virtual('duration').get(function () {
