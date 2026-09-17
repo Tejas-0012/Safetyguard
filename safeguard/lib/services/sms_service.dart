@@ -67,24 +67,17 @@ class SmsService {
     required String emergencyId,
     required String webUrl,
   }) async {
+    print('📱 ===== SENDING EMERGENCY SMS WITH WEB LINK =====');
+    print('📱 Contact: $contactName');
+    print('📱 Phone: $contactPhone');
+    print('📱 Web URL: $webUrl');
+
+    // ✅ SHORT MESSAGE (under 160 chars per SMS)
     final message =
-        '''
-🚨 EMERGENCY ALERT
+        'EMERGENCY! $userName needs help. '
+        'Track live: $webUrl';
 
-$userName has activated an SOS alert!
-
-📍 Current Location:
-https://www.google.com/maps?q=$latitude,$longitude
-
-🔴 View Live Location & Images:
-$webUrl
-
-Reply "I'm coming" to let them know!
-
-Please check the SafeGuard app for live updates.
-    ''';
-
-    return await sendSms(phoneNumber: contactPhone, message: message.trim());
+    return await sendSms(phoneNumber: contactPhone, message: message);
   }
 
   // ✅ NEW: Listen for incoming SMS replies

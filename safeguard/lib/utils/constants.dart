@@ -10,7 +10,7 @@ class AppConstants {
   // real SMS sending) can reach the backend over WiFi. This changes if your
   // machine reconnects to WiFi or DHCP reassigns it — check with `ipconfig`
   // (Windows) and update here if requests start failing.
-  static const String baseUrl = 'http://10.246.18.187:5000/api';
+  static const String baseUrl = 'http://10.127.220.187:5000/api';
 
   // Shared Preferences Keys
   static const String tokenKey = 'token';

@@ -129,6 +129,11 @@ class ApiService {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> getReplies(String emergencyId) async {
+    final response = await _dio.get('/emergency/$emergencyId/replies');
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> replyToEmergency(
     String id,
     String message,

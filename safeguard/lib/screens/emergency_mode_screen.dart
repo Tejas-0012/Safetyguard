@@ -7,6 +7,7 @@ import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
+import 'emergency_replies_screen.dart';
 
 //hello check git hub
 class EmergencyModeScreen extends StatefulWidget {
@@ -51,10 +52,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
   void _setupEmergencyTracking() {
     _locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    _emergencyProvider = Provider.of<EmergencyProvider>(
-      context,
-      listen: false,
-    );
+    _emergencyProvider = Provider.of<EmergencyProvider>(context, listen: false);
 
     if (!_locationProvider!.isTracking) {
       _locationProvider!.startTracking();
@@ -329,6 +327,33 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            // Add this in the Column of buttons (below SEND SMS button)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EmergencyRepliesScreen(
+                          emergencyId: emergency.id,
+                          emergencyTitle: 'Emergency',
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.chat),
+                  label: const Text('VIEW REPLIES FROM CONTACTS'),
+                ),
               ),
             ),
 

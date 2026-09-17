@@ -1,0 +1,656 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <title>SafeGuard - Emergency Monitoring</title>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWhvMTxoUvkqugwaJIqTWrlwdHT4H2jXw"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: #f1f3f6;
+            min-height: 100vh;
+            color: #222;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        .header {
+            background: linear-gradient(135deg, #1a237e, #0d47a1);
+            color: white;
+            padding: 18px 20px;
+            min-height: 70px;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+        }
+
+        .header h1 {
+            font-size: 23px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        .status.active {
+            background: #ff1744;
+            padding: 8px 14px;
+            border-radius: 25px;
+
+            font-size: 13px;
+            font-weight: 700;
+
+            box-shadow: 0 2px 8px rgba(255,23,68,0.4);
+
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.55;
+            }
+        }
+
+        /* =========================
+           MAIN CONTAINER
+        ========================= */
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto;
+
+            padding: 14px;
+        }
+
+        /* =========================
+           LOADING
+        ========================= */
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            height: 70vh;
+
+            font-size: 17px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .spinner {
+            width: 42px;
+            height: 42px;
+
+            border: 4px solid #ddd;
+            border-top-color: #1a237e;
+
+            border-radius: 50%;
+
+            animation: spin 0.8s linear infinite;
+
+            margin-right: 14px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* =========================
+           SENDER INFO
+        ========================= */
+
+        .sender-info {
+            background: white;
+
+            border-radius: 16px;
+
+            padding: 18px;
+
+            margin-bottom: 14px;
+
+            display: flex;
+            align-items: center;
+
+            gap: 15px;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .avatar {
+            width: 58px;
+            height: 58px;
+
+            flex-shrink: 0;
+
+            border-radius: 50%;
+
+            background: #e3f2fd;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-size: 24px;
+            font-weight: 700;
+
+            color: #1a237e;
+        }
+
+        #senderName {
+            font-size: 19px !important;
+            font-weight: 700 !important;
+
+            margin-bottom: 5px;
+        }
+
+        #senderPhone {
+            font-size: 15px !important;
+            color: #666;
+        }
+
+        /* =========================
+           MAP
+        ========================= */
+
+        .map-container {
+            background: white;
+
+            border-radius: 16px;
+
+            overflow: hidden;
+
+            margin-bottom: 14px;
+
+            height: 360px;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* =========================
+           INFO CARDS
+        ========================= */
+
+        .info-grid {
+            display: grid;
+
+            grid-template-columns: repeat(2, 1fr);
+
+            gap: 12px;
+
+            margin-bottom: 14px;
+        }
+
+        .info-card {
+            background: white;
+
+            border-radius: 16px;
+
+            padding: 18px 12px;
+
+            min-height: 95px;
+
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+
+            text-align: center;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .info-card .label {
+            font-size: 12px;
+
+            color: #777;
+
+            text-transform: uppercase;
+
+            letter-spacing: 0.6px;
+
+            font-weight: 600;
+        }
+
+        .info-card .value {
+            font-size: 21px;
+
+            font-weight: 700;
+
+            margin-top: 7px;
+
+            color: #222;
+        }
+
+        /* =========================
+           IMAGES
+        ========================= */
+
+        .images-container {
+            background: white;
+
+            border-radius: 16px;
+
+            padding: 18px;
+
+            margin-bottom: 14px;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .images-container h3 {
+            font-size: 18px;
+
+            margin-bottom: 14px;
+        }
+
+        .image-grid {
+            display: grid;
+
+            grid-template-columns: repeat(2, 1fr);
+
+            gap: 10px;
+        }
+
+        .image-grid img {
+            width: 100%;
+            height: 150px;
+
+            object-fit: cover;
+
+            border-radius: 12px;
+
+            border: 1px solid #eee;
+        }
+
+        /* =========================
+           REPLY SECTION
+        ========================= */
+
+        .reply-section {
+            background: white;
+
+            border-radius: 16px;
+
+            padding: 18px;
+
+            margin-bottom: 20px;
+
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+
+        .reply-section h3 {
+            font-size: 19px;
+
+            margin-bottom: 14px;
+        }
+
+        .reply-input {
+            display: flex;
+
+            gap: 8px;
+
+            width: 100%;
+        }
+
+        .reply-input input {
+            flex: 1;
+
+            min-width: 0;
+
+            padding: 14px 17px;
+
+            border: 2px solid #ddd;
+
+            border-radius: 28px;
+
+            font-size: 16px;
+
+            outline: none;
+
+            background: #fafafa;
+        }
+
+        .reply-input input:focus {
+            border-color: #1a237e;
+
+            background: white;
+        }
+
+        .reply-input button {
+            min-width: 80px;
+
+            padding: 14px 18px;
+
+            background: #1a237e;
+
+            color: white;
+
+            border: none;
+
+            border-radius: 28px;
+
+            font-size: 15px;
+
+            font-weight: 700;
+
+            cursor: pointer;
+
+            touch-action: manipulation;
+        }
+
+        .reply-input button:active {
+            transform: scale(0.96);
+        }
+
+        /* =========================
+           REPLIES
+        ========================= */
+
+        .replies-list {
+            margin-top: 15px;
+
+            max-height: 220px;
+
+            overflow-y: auto;
+        }
+
+        .reply-item {
+            padding: 12px 14px;
+
+            background: #f3f5f7;
+
+            border-radius: 10px;
+
+            margin-bottom: 7px;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            font-size: 15px;
+        }
+
+        /* =========================
+           SMALL MOBILE
+        ========================= */
+
+        @media (max-width: 380px) {
+
+            .header {
+                padding: 16px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .status.active {
+                font-size: 11px;
+                padding: 7px 10px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .map-container {
+                height: 300px;
+            }
+
+            .info-card {
+                min-height: 88px;
+                padding: 14px 8px;
+            }
+
+            .info-card .value {
+                font-size: 19px;
+            }
+
+            .image-grid img {
+                height: 125px;
+            }
+
+            .reply-input input {
+                font-size: 15px;
+            }
+        }
+
+        /* =========================
+           TABLET / DESKTOP
+        ========================= */
+
+        @media (min-width: 768px) {
+
+            .container {
+                padding: 24px;
+            }
+
+            .map-container {
+                height: 450px;
+            }
+
+            .info-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+
+            .image-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+
+            .image-grid img {
+                height: 140px;
+            }
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="header">
+
+        <h1>🛡️ SafeGuard</h1>
+
+        <span class="status active" id="statusBadge">
+            ● ACTIVE
+        </span>
+
+    </div>
+
+
+    <!-- MAIN -->
+    <div class="container">
+
+        <!-- LOADING -->
+        <div class="loading" id="loading">
+
+            <div class="spinner"></div>
+
+            <span>Loading emergency data...</span>
+
+        </div>
+
+
+        <!-- CONTENT -->
+        <div id="content" style="display: none;">
+
+
+            <!-- SENDER -->
+            <div class="sender-info">
+
+                <div class="avatar" id="avatar">
+                    U
+                </div>
+
+                <div>
+
+                    <div id="senderName">
+                        Loading...
+                    </div>
+
+                    <div id="senderPhone">
+                        📱 --
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- MAP -->
+            <div class="map-container">
+
+                <div id="map"></div>
+
+            </div>
+
+
+            <!-- INFORMATION -->
+            <div class="info-grid">
+
+                <div class="info-card">
+
+                    <div class="label">
+                        Status
+                    </div>
+
+                    <div class="value" id="statusValue">
+                        🔴 Active
+                    </div>
+
+                </div>
+
+
+                <div class="info-card">
+
+                    <div class="label">
+                        Duration
+                    </div>
+
+                    <div class="value" id="durationValue">
+                        00:00
+                    </div>
+
+                </div>
+
+
+                <div class="info-card">
+
+                    <div class="label">
+                        Updates
+                    </div>
+
+                    <div class="value" id="updateCount">
+                        0
+                    </div>
+
+                </div>
+
+
+                <div class="info-card">
+
+                    <div class="label">
+                        Images
+                    </div>
+
+                    <div class="value" id="imageCount">
+                        0
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- EMERGENCY IMAGES -->
+            <div
+                class="images-container"
+                id="imagesContainer"
+                style="display: none;"
+            >
+
+                <h3>
+                    📸 Emergency Images
+                </h3>
+
+                <div
+                    class="image-grid"
+                    id="imageGrid"
+                ></div>
+
+            </div>
+
+
+            <!-- REPLY -->
+            <div class="reply-section">
+
+                <h3>
+                    💬 Send Reply
+                </h3>
+
+                <div class="reply-input">
+
+                    <input
+                        type="text"
+                        id="replyInput"
+                        placeholder="Type 'I'm coming'..."
+                    />
+
+                    <button id="sendReplyBtn">
+                        Send
+                    </button>
+
+                </div>
+
+
+                <div
+                    class="replies-list"
+                    id="repliesList"
+                ></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- EXISTING JAVASCRIPT -->
+    <script src="/assets/js/receiver.js"></script>
+
+</body>
+</html>
+```

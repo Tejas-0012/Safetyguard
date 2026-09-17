@@ -213,6 +213,20 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
 
+  Future<List<ReceiverReply>> getReplies(String emergencyId) async {
+    try {
+      final response = await _apiService.getReplies(emergencyId);
+      if (response['success'] == true) {
+        final List replies = response['replies'] ?? [];
+        return replies.map((r) => ReceiverReply.fromJson(r)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('❌ Get replies error: $e');
+      return [];
+    }
+  }
+
   // ✅ NEW METHODS
 
   Future<Map<String, dynamic>> replyToEmergency(

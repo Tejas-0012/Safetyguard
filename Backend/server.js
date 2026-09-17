@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const connectDB = require('./src/config/database');
@@ -15,40 +16,67 @@ const errorHandler = require('./src/middleware/errorHandler');
 
 const app = express();
 
-// Middleware
-app.use(helmet());
-app.use(cors());
+// ============ HELMET WITH CSP DISABLED ============
+// Google Maps script is blocked by default CSP.
+// We disable CSP for development so external scripts load.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,        // ✅ Allow Google Maps
+    crossOriginOpenerPolicy: false,      // ✅ Fix COOP warning
+    crossOriginEmbedderPolicy: false,    // ✅ Fix COEP warning
+    crossOriginResourcePolicy: false,    // ✅ Allow cross-origin
+  })
+);
+
+// ============ CORS ============
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true,
+}));
+app.options('*', cors());
+
+// ============ BODY PARSER ============
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
+// ============ STATIC FILES ============
+// MUST come before API routes so /assets/* works
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ============ RATE LIMITING ============
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,  // ✅ Increased for polling from receiver page
 });
 app.use('/api', limiter);
 
-// Routes
+// ============ API ROUTES ============
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/emergency', emergencyRoutes);
 
-// Health check
+// ============ HEALTH CHECK ============
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'SafeGuard API is running' });
 });
 
-// Global error handler - catches anything that slips past a controller's
-// own try/catch (must be registered after all routes)
+// ============ RECEIVER WEB PAGE ============
+app.get('/receiver/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'receiver.html'));
+});
+
+// ============ ERROR HANDLER ============
 app.use(errorHandler);
 
-// Connect to MongoDB, then start the server once the connection is ready
-// (previously the server started listening immediately, so requests could
-// arrive before the DB connection was established).
+// ============ START SERVER ============
 const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📁 Static files: ${path.join(__dirname, 'public')}`);
+    console.log(`🔗 Web: http://10.127.210.187:${PORT}`);
   });
 });

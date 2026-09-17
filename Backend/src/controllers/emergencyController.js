@@ -258,6 +258,43 @@ exports.getHistory = async (req, res) => {
   }
 };
 
+// ============ ✅ GET REPLIES ============
+// @desc    Get all replies for an emergency
+// @route   GET /api/emergency/:id/replies
+// @access  Private (Sender only)
+exports.getReplies = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const emergency = await Emergency.findById(id);
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found'
+      });
+    }
+
+    // Only the sender can view replies
+    if (emergency.userId.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the sender can view replies'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      replies: emergency.receiverReplies || []
+    });
+  } catch (error) {
+    console.error('Get replies error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // ============ ADD IMAGE ============
 // @desc    Add emergency image
 // @route   POST /api/emergency/:id/image
@@ -410,11 +447,12 @@ exports.generateWebStream = async (req, res) => {
     }
 
     // Check if user is a notified contact
+    const isSender = emergency.userId._id.toString() === req.user.id;
     const isContact = emergency.notifiedContacts.some(
       contact => contact._id.toString() === req.user.id
     );
 
-    if (!isContact) {
+    if (!isContact && !isSender) {
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to view this emergency'
@@ -427,8 +465,10 @@ exports.generateWebStream = async (req, res) => {
     emergency.isWebStreamActive = true;
     await emergency.save();
 
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const baseUrl = process.env.FRONTEND_URL || 'http://10.112.210.187:5000';
     const webUrl = `${baseUrl}/receiver/${token}`;
+
+    console.log('✅ Web stream generated:', webUrl);
 
     res.status(200).json({
       success: true,
@@ -493,7 +533,75 @@ exports.getEmergencyByToken = async (req, res) => {
     });
   }
 };
+// ============ ✅ NEW: WEB REPLY (Public - via token) ============
+// @desc    Reply from web viewer (no auth)
+// @route   POST /api/emergency/web/:token/reply
+// @access  Public (via token)
+exports.webReply = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { message, viewerName } = req.body;
 
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reply message is required'
+      });
+    }
+
+    const emergency = await Emergency.findOne({ webStreamToken: token });
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link'
+      });
+    }
+
+    // Add reply from web viewer
+    emergency.receiverReplies.push({
+      contactName: viewerName || 'Web Viewer',
+      message: message
+    });
+    await emergency.save();
+
+    // ✅ Notify sender via FCM
+    const sender = await User.findById(emergency.userId);
+    if (sender) {
+      try {
+        await messaging.send({
+          notification: {
+            title: '📩 Reply from Web Viewer',
+            body: `${viewerName || 'Someone'} says: "${message}"`,
+          },
+          data: {
+            type: 'reply',
+            emergencyId: emergency._id.toString(),
+            contactName: viewerName || 'Web Viewer',
+            message: message
+          },
+          topic: `user_${sender._id}`
+        });
+      } catch (fcmError) {
+        console.log('FCM notify sender error:', fcmError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      reply: {
+        contactName: viewerName || 'Web Viewer',
+        message: message,
+        repliedAt: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Web reply error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 // ============ ✅ NEW: GET EMERGENCY DETAILS FOR APP ============
 // @desc    Get emergency details for app user
 // @route   GET /api/emergency/:id/details
