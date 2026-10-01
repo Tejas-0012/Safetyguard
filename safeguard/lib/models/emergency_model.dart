@@ -132,49 +132,54 @@ class Emergency {
   });
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
-    return Emergency(
-      id: json['id'] ?? json['_id'] ?? '',
-      userId: json['userId'] != null && json['userId'] is Map<String, dynamic>
-          ? UserModel.fromJson(json['userId'])
-          : null,
-      startTime: DateTime.parse(json['startTime']),
-      endTime: json['endTime'] != null ? DateTime.parse(json['endTime']) : null,
-      status: json['status'] ?? 'active',
+    // Handle userId being either a String or a Map
+    UserModel? parsedUserId;
+    final rawUserId = json['userId'];
+    if (rawUserId is Map<String, dynamic>) {
+      parsedUserId = UserModel.fromJson(rawUserId);
+    }
 
+    return Emergency(
+      id: (json['id'] ?? json['_id'] ?? '').toString(),
+      userId: parsedUserId,
+      startTime:
+          DateTime.tryParse(json['startTime']?.toString() ?? '') ??
+          DateTime.now(),
+      endTime: json['endTime'] != null
+          ? DateTime.tryParse(json['endTime'].toString())
+          : null,
+      status: json['status'] ?? 'active',
       locationPoints: json['locationPoints'] is List
           ? (json['locationPoints'] as List)
                 .map((p) => LocationPoint.fromJson(p))
                 .toList()
           : [],
-
-      currentLocation:
-          json['currentLocation'] != null && json['currentLocation'] is Map
+      currentLocation: json['currentLocation'] is Map<String, dynamic>
           ? LocationPoint.fromJson(json['currentLocation'])
           : null,
-
       notifiedContacts: json['notifiedContacts'] is List
-          ? List<String>.from(json['notifiedContacts'])
+          ? (json['notifiedContacts'] as List)
+                .map(
+                  (c) => c is Map ? (c['_id'] ?? '').toString() : c.toString(),
+                )
+                .toList()
           : [],
-
       cameraImages: json['cameraImages'] is List
           ? (json['cameraImages'] as List)
                 .map((i) => EmergencyImage.fromJson(i))
                 .toList()
           : [],
-
       isVideoActive: json['isVideoActive'] ?? false,
       createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
+          ? DateTime.tryParse(json['createdAt'].toString())
           : null,
-
       receiverReplies: json['receiverReplies'] is List
           ? (json['receiverReplies'] as List)
                 .map((r) => ReceiverReply.fromJson(r))
                 .toList()
           : [],
-
       isWebStreamActive: json['isWebStreamActive'] ?? false,
-      webStreamToken: json['webStreamToken'] ?? '',
+      webStreamToken: json['webStreamToken']?.toString() ?? '',
     );
   }
 

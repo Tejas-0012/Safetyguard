@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../services/location_service.dart';
+import '../services/storage_service.dart';
 
 class LocationProvider extends ChangeNotifier {
   final LocationService _locationService;
+  final StorageService? _storage;
   Position? _currentPosition;
   bool _isLoading = false;
   bool _isTracking = false;
   String? _error;
 
-  LocationProvider(this._locationService) {
+  LocationProvider(this._locationService, {StorageService? storage})
+    : _storage = storage {
     _initialize();
   }
 
@@ -34,6 +37,14 @@ class LocationProvider extends ChangeNotifier {
       _currentPosition = position;
       _isLoading = false;
       notifyListeners();
+
+      // ✅ Save immediately after getting location
+      if (_storage != null) {
+        await _storage!.saveLastLocation(position.latitude, position.longitude);
+        print(
+          '💾 Saved initial location: ${position.latitude}, ${position.longitude}',
+        );
+      }
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
@@ -52,6 +63,11 @@ class LocationProvider extends ChangeNotifier {
       _locationService.startLocationUpdates((position) {
         _currentPosition = position;
         notifyListeners();
+
+        // ✅ Save to SharedPreferences on every update
+        if (_storage != null) {
+          _storage!.saveLastLocation(position.latitude, position.longitude);
+        }
       });
     } catch (e) {
       _error = e.toString();

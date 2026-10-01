@@ -121,6 +121,11 @@ class ApiService {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> getActiveEmergency() async {
+    final response = await _dio.get('/emergency/active');
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> addEmergencyImage(
     String id,
     Map<String, dynamic> data,

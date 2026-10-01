@@ -230,7 +230,38 @@ exports.getEmergencyStatus = async (req, res) => {
     });
   }
 };
+// ============ ✅ GET ACTIVE EMERGENCY ============
+// @desc    Get current user's active emergency (if any)
+// @route   GET /api/emergency/active
+// @access  Private
+exports.getActiveEmergency = async (req, res) => {
+  try {
+    const emergency = await Emergency.findOne({
+      userId: req.user.id,
+      status: 'active'
+    })
+      .populate('userId', 'name phone email')
+      .populate('notifiedContacts', 'name phone');
 
+    if (!emergency) {
+      return res.status(200).json({
+        success: true,
+        emergency: null
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      emergency
+    });
+  } catch (error) {
+    console.error('Get active emergency error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 // ============ GET EMERGENCY HISTORY ============
 // @desc    Get emergency history for user
 // @route   GET /api/emergency/history

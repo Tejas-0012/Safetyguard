@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/services.dart';
 
 import 'firebase_options.dart';
 
@@ -16,6 +17,9 @@ import 'services/api_service.dart';
 import 'services/location_service.dart';
 import 'services/notification_service.dart';
 import 'services/sms_service.dart';
+import 'services/sos_trigger_service.dart';
+import 'services/storage_service.dart';
+import 'services/native_bridge_service.dart';
 
 // Screens
 import 'screens/splash_screen.dart';
@@ -26,6 +30,14 @@ import 'screens/contacts_screen.dart';
 import 'screens/emergency_mode_screen.dart';
 import 'screens/emergency_monitoring_screen.dart';
 import 'screens/profile_screen.dart';
+
+// ✅ GLOBAL — accessible from _MyAppState
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// ✅ GLOBAL — native bridge channel
+const MethodChannel _nativeChannel = MethodChannel(
+  'com.example.safeguard/native',
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,11 +52,17 @@ void main() async {
     print('❌ Firebase initialization failed: $e');
   }
 
-  // ✅ Create separate services
+  // ✅ Create services
+  final storageService = StorageService();
   final authService = AuthService();
-  final apiService = ApiService(); // ✅ Create ApiService separately
+  final apiService = ApiService();
   final locationService = LocationService();
   final smsService = SmsService();
+  final sosTriggerService = SosTriggerService(
+    apiService: apiService,
+    smsService: smsService,
+    storage: storageService,
+  );
 
   try {
     await NotificationService.initialize();
@@ -56,25 +74,71 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
+        ChangeNotifierProvider(create: (_) => EmergencyProvider(apiService)),
         ChangeNotifierProvider(
-          create: (_) => EmergencyProvider(apiService),
-        ), // ✅ Pass ApiService
-        ChangeNotifierProvider(
-          create: (_) => LocationProvider(locationService),
+          create: (_) =>
+              LocationProvider(locationService, storage: storageService),
         ),
         Provider<SmsService>.value(value: smsService),
+        Provider<StorageService>.value(value: storageService),
+        Provider<SosTriggerService>.value(value: sosTriggerService),
       ],
       child: const MyApp(),
     ),
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    _setupNativeHandlers();
+    _checkTileLaunch();
+  }
+
+  void _setupNativeHandlers() {
+    // Called when tile is tapped while app is already running
+    NativeBridgeService.onOpenEmergencyMode(() {
+      print('📱 Native: openEmergencyMode received');
+      _goToEmergencyMode();
+    });
+  }
+
+  Future<void> _checkTileLaunch() async {
+    // Wait for app to fully initialize
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
+    try {
+      final fromTile = await NativeBridgeService.wasLaunchedFromTile();
+      print('📱 Native: wasLaunchedFromTile = $fromTile');
+
+      if (fromTile) {
+        await NativeBridgeService.clearTileLaunch();
+        _goToEmergencyMode();
+      }
+    } catch (e) {
+      print('NativeBridge error: $e');
+    }
+  }
+
+  void _goToEmergencyMode() {
+    if (!mounted) return;
+    navigatorKey.currentState?.pushNamed('/emergency');
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey, // ✅ CRITICAL
       title: 'SafeGuard',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

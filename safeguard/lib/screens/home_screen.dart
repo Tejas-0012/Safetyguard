@@ -6,14 +6,14 @@ import '../providers/auth_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/user_model.dart';
-import '../models/contact_model.dart';
-import '../services/sms_service.dart';
+import '../services/storage_service.dart';
+import '../services/sos_trigger_service.dart';
 import '../utils/app_colors.dart';
-import 'emergency_mode_screen.dart';
 import 'notifications_screen.dart';
+import 'emergency_monitoring_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -30,13 +30,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============ DATA ============
-  void _loadData() {
+  void _loadData() async {
     final emergencyProvider = Provider.of<EmergencyProvider>(
       context,
       listen: false,
     );
     emergencyProvider.loadContacts();
     emergencyProvider.loadHistory();
+
+    // ✅ Load active emergency — turns Home red if any exists
+    await emergencyProvider.loadActiveEmergency();
   }
 
   void _setupLocationTracking() {
@@ -44,7 +47,27 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       listen: false,
     );
+    final storageService = Provider.of<StorageService>(context, listen: false);
+
     locationProvider.startTracking();
+
+    // ✅ Save location to SharedPreferences so the tile can use it
+    locationProvider.addListener(() {
+      final pos = locationProvider.currentPosition;
+      if (pos != null) {
+        storageService.saveLastLocation(pos.latitude, pos.longitude);
+        print('💾 Saved location: ${pos.latitude}, ${pos.longitude}');
+      }
+    });
+
+    // ✅ Also save immediately if location is already available
+    final currentPos = locationProvider.currentPosition;
+    if (currentPos != null) {
+      storageService.saveLastLocation(
+        currentPos.latitude,
+        currentPos.longitude,
+      );
+    }
   }
 
   // ============ PHONE CLEANER ============
@@ -168,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.danger.withOpacity(0.35),
+                      color: AppColors.danger.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -278,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
         boxShadow: [
           BoxShadow(
             color: (isEmergencyActive ? AppColors.danger : AppColors.secondary)
-                .withOpacity(0.3),
+                .withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -292,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -331,33 +354,54 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? 'Your contacts have been notified with your live location.'
                 : 'We are monitoring your safety in real-time. Stay aware of your surroundings.',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 13,
               height: 1.4,
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.25),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.location_on, color: Colors.white, size: 16),
-                const SizedBox(width: 6),
-                Text(
-                  isEmergencyActive ? 'LIVE TRACKING ON' : '24/7 ACTIVE',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
+          // ✅ NEW (tappable when emergency is active)
+          GestureDetector(
+            onTap: () {
+              if (isEmergencyActive) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const EmergencyMonitoringScreen(),
                   ),
-                ),
-              ],
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.location_on, color: Colors.white, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    isEmergencyActive ? 'LIVE TRACKING ON' : '24/7 ACTIVE',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  if (isEmergencyActive) ...[
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
@@ -422,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
             borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
             boxShadow: [
               BoxShadow(
-                color: AppColors.danger.withOpacity(0.4),
+                color: AppColors.danger.withValues(alpha: 0.4),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -434,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -563,7 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.12),
+                color: iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppColors.radiusMedium),
               ),
               child: Icon(icon, color: iconColor, size: 24),
@@ -607,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: AppColors.card,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -657,7 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.primary.withOpacity(0.1)
+                  ? AppColors.primary.withValues(alpha: 0.1)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
@@ -717,7 +761,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('Activate SOS?'),
               ],
             ),
-            content: Container(
+            content: SizedBox(
               width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -777,7 +821,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Switch(
                         value: shareCamera,
                         onChanged: (v) => setDialogState(() => shareCamera = v),
-                        activeColor: AppColors.primary,
+                        activeThumbColor: AppColors.primary,
                       ),
                     ],
                   ),
@@ -793,7 +837,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Switch(
                         value: shareVideo,
                         onChanged: (v) => setDialogState(() => shareVideo = v),
-                        activeColor: AppColors.secondary,
+                        activeThumbColor: AppColors.secondary,
                       ),
                     ],
                   ),
@@ -808,8 +852,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: _getSelectedCount(selectedContacts) > 0
-                          ? AppColors.success.withOpacity(0.1)
-                          : AppColors.danger.withOpacity(0.1),
+                          ? AppColors.success.withValues(alpha: 0.1)
+                          : AppColors.danger.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: _getSelectedCount(selectedContacts) > 0
@@ -864,56 +908,38 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============ ACTIVATE SOS ============
+  // ============ ACTIVATE SOS (refactored) ============
   void _activateSOS(
     Map<String, bool> selectedContacts,
     bool shareCamera,
     bool shareVideo,
   ) async {
     print('🔴 ===== ACTIVATE SOS CALLED =====');
-    print('📱 Selected contacts: ${selectedContacts.length}');
 
-    final locationProvider = Provider.of<LocationProvider>(
-      context,
-      listen: false,
-    );
     final emergencyProvider = Provider.of<EmergencyProvider>(
       context,
       listen: false,
     );
-    final smsService = Provider.of<SmsService>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final sosTriggerService = Provider.of<SosTriggerService>(
+      context,
+      listen: false,
+    );
 
-    final user = authProvider.user;
-    if (user == null) {
-      _showSnackBar('User not logged in. Please login again.', isError: true);
-      return;
-    }
-
-    final position = locationProvider.currentPosition;
-    if (position == null) {
-      _showSnackBar(
-        'Unable to get your location. Please enable GPS.',
-        isError: true,
-      );
-      return;
-    }
-
-    List<EmergencyContact> selectedContactList = [];
-    for (var contact in emergencyProvider.contacts) {
-      if (selectedContacts[contact.id] == true) {
-        selectedContactList.add(contact);
-      }
-    }
+    // Build list of selected contacts
+    final selectedContactList = emergencyProvider.contacts
+        .where((c) => selectedContacts[c.id] == true)
+        .toList();
 
     if (selectedContactList.isEmpty) {
       _showSnackBar('No contacts selected!', isError: true);
       return;
     }
 
+    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
+      builder: (_) => const Center(
         child: Card(
           child: Padding(
             padding: EdgeInsets.all(24.0),
@@ -930,85 +956,35 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    try {
-      // 1. Start emergency
-      final success = await emergencyProvider.startEmergency(
-        position.latitude,
-        position.longitude,
-      );
+    // ✅ Call the single source of truth
+    final result = await sosTriggerService.trigger(
+      customContacts: selectedContactList,
+      shareCamera: shareCamera,
+      shareVideo: shareVideo,
+    );
 
-      if (!success) {
-        Navigator.pop(context);
-        _showSnackBar(
-          emergencyProvider.error ?? 'Failed to start emergency',
-          isError: true,
-        );
-        return;
+    if (!mounted) return;
+    Navigator.pop(context); // close loading
+
+    if (result.success && result.emergencyId != null) {
+      // ✅ Refresh the current emergency so EmergencyModeScreen sees it
+      await emergencyProvider.refreshEmergencyStatus(result.emergencyId!);
+
+      // If it's still null (backend returned a different shape), wait 1 second and retry once
+      if (emergencyProvider.currentEmergency == null) {
+        await Future.delayed(const Duration(milliseconds: 800));
+        await emergencyProvider.refreshEmergencyStatus(result.emergencyId!);
       }
 
-      final emergency = emergencyProvider.currentEmergency;
-      if (emergency == null) {
-        Navigator.pop(context);
-        _showSnackBar('Emergency not found after creation', isError: true);
-        return;
-      }
-
-      // 2. Generate web link
-      String webUrl = '';
-      try {
-        final webResult = await emergencyProvider.generateWebStream(
-          emergency.id,
-        );
-        if (webResult['success'] == true) {
-          webUrl = webResult['webUrl'] ?? '';
-        }
-      } catch (e) {
-        print('⚠️ Web link generation error: $e');
-      }
-
-      // 3. Send SMS
-      int smsSent = 0;
-      for (var contact in selectedContactList) {
-        try {
-          final phoneNumber = _cleanPhoneNumber(contact.phone);
-          bool result;
-          if (webUrl.isNotEmpty) {
-            result = await smsService.sendEmergencyAlertWithWebLink(
-              contactName: contact.name,
-              contactPhone: phoneNumber,
-              userName: user.name,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              emergencyId: emergency.id,
-              webUrl: webUrl,
-            );
-          } else {
-            result = await smsService.sendEmergencyAlert(
-              contactName: contact.name,
-              contactPhone: phoneNumber,
-              userName: user.name,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              emergencyId: emergency.id,
-            );
-          }
-          if (result) smsSent++;
-        } catch (e) {
-          print('❌ SMS error for ${contact.name}: $e');
-        }
-      }
-
-      Navigator.pop(context);
       _showSnackBar(
-        '✅ SOS Activated! SMS sent to $smsSent/${selectedContactList.length} contacts',
+        '✅ SOS Activated! SMS sent to ${result.smsSentCount}/${result.totalContacts} contacts',
       );
 
       if (mounted) {
         Navigator.pushNamed(context, '/emergency');
       }
-    } catch (e) {
-      Navigator.pop(context);
-      _showSnackBar('Error: ${e.toString()}', isError: true);
+    } else {
+      _showSnackBar(result.error ?? 'Failed to start SOS', isError: true);
     }
   }
 

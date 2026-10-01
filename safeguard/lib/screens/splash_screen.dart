@@ -95,15 +95,16 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // ✅ REPLACED SHIELD ICON WITH safeicon.png
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
                   scale: _scaleAnimation,
                   child: Container(
-                    width: 120,
-                    height: 120,
+                    width: 140,
+                    height: 140,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -113,10 +114,14 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.shield,
-                      size: 70,
-                      color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/icon/safeicon.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
                   ),
                 ),

@@ -4,7 +4,6 @@
 // widgets ('0', '1', a '+' icon) that don't exist in this project and would
 // always fail.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 

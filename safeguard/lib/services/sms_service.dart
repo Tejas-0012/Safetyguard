@@ -86,12 +86,12 @@ class SmsService {
       onNewMessage: (SmsMessage message) {
         final sender = message.address ?? 'Unknown'; // ✅ 'address' not 'sender'
         final body = message.body ?? '';
-        print('📩 SMS Received from: ${sender}');
+        print('📩 SMS Received from: $sender');
         print('📩 Message: ${message.body}');
 
         // Check if message is a reply to emergency
         if (message.body?.toLowerCase().contains('coming') == true) {
-          onReply(sender!, message.body!);
+          onReply(sender, message.body!);
         }
       },
     );

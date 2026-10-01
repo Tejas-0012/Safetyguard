@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../services/storage_service.dart';
 
 class AuthProvider extends ChangeNotifier {
+  final StorageService _storage = StorageService();
   final AuthService _authService;
   UserModel? _user;
   bool _isLoading = false;
@@ -212,6 +214,13 @@ class AuthProvider extends ChangeNotifier {
       if (response['success'] == true) {
         _user = UserModel.fromJson(response['user']);
         await _authService.setToken(response['token']);
+        await _storage.saveAuthToken(response['token']);
+        await _storage.saveUserInfo(
+          userId: _user!.id,
+          name: _user!.name,
+          phone: _user!.phone,
+        );
+        await _storage.setApiBaseUrl(AuthService.baseUrl);
         _isLoading = false;
         _isPhoneVerified = false;
         _verificationId = null;
@@ -244,6 +253,13 @@ class AuthProvider extends ChangeNotifier {
       if (response['success'] == true) {
         _user = UserModel.fromJson(response['user']);
         await _authService.setToken(response['token']);
+        await _storage.saveAuthToken(response['token']);
+        await _storage.saveUserInfo(
+          userId: _user!.id,
+          name: _user!.name,
+          phone: _user!.phone,
+        );
+        await _storage.setApiBaseUrl(AuthService.baseUrl);
         _isLoading = false;
         _isPhoneVerified = false;
         _verificationId = null;
@@ -279,6 +295,13 @@ class AuthProvider extends ChangeNotifier {
       if (response['success'] == true) {
         _user = UserModel.fromJson(response['user']);
         await _authService.setToken(response['token']);
+        await _storage.saveAuthToken(response['token']);
+        await _storage.saveUserInfo(
+          userId: _user!.id,
+          name: _user!.name,
+          phone: _user!.phone,
+        );
+        await _storage.setApiBaseUrl(AuthService.baseUrl);
         _isLoading = false;
         notifyListeners();
         return true;
@@ -328,6 +351,7 @@ class AuthProvider extends ChangeNotifier {
       // Ignore if Firebase sign out fails
     }
     await _authService.clearToken();
+    await _storage.clearAll();
     _user = null;
     _verificationId = null;
     _isPhoneVerified = false;

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/emergency_model.dart';
 import '../models/contact_model.dart';
-import '../models/user_model.dart';
 
 class EmergencyProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -247,6 +246,36 @@ class EmergencyProvider extends ChangeNotifier {
       return response;
     } catch (e) {
       return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  Future<void> setCurrentEmergencyFromStartResponse(
+    Map<String, dynamic> emergencyData,
+  ) async {
+    try {
+      _currentEmergency = Emergency.fromJson(emergencyData);
+      notifyListeners();
+    } catch (e) {
+      print('Error setting current emergency: $e');
+    }
+  }
+
+  Future<void> loadActiveEmergency() async {
+    try {
+      final response = await _apiService.getActiveEmergency();
+      if (response['success'] == true) {
+        final emergencyData = response['emergency'];
+        if (emergencyData != null) {
+          _currentEmergency = Emergency.fromJson(emergencyData);
+          print('✅ Loaded active emergency: ${_currentEmergency!.id}');
+        } else {
+          _currentEmergency = null;
+          print('ℹ️ No active emergency');
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error loading active emergency: $e');
     }
   }
 

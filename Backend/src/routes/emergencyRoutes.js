@@ -14,9 +14,12 @@ const {
   getEmergencyDetails,
   webReply,
   getReplies,  
+  getActiveEmergency,
 } = require('../controllers/emergencyController');
 
 // ============ PROTECTED ROUTES ============
+router.get('/active', protect, getActiveEmergency);
+
 router.post('/start', protect, startEmergency);
 router.post('/:id/location', protect, updateLocation);
 router.post('/:id/stop', protect, stopEmergency);

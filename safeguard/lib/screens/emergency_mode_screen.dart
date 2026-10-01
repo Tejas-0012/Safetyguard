@@ -7,9 +7,9 @@ import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
+import '../utils/app_colors.dart';
 import 'emergency_replies_screen.dart';
 
-//hello check git hub
 class EmergencyModeScreen extends StatefulWidget {
   const EmergencyModeScreen({super.key});
 
@@ -33,9 +33,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     _setupEmergencyTracking();
   }
 
-  // Named listener so it can be removed in dispose(); an anonymous listener
-  // added and never removed lets setState() fire after this widget is
-  // disposed (crash) and leaks the listener.
   void _onLocationChanged() {
     final position = _locationProvider?.currentPosition;
     if (position != null && _emergencyProvider?.currentEmergency != null) {
@@ -70,8 +67,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   void _updateLocation(double lat, double lng) {
     if (!mounted) return;
     setState(() {
-      _locationUpdate =
-          '📍 ${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
+      _locationUpdate = '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
     });
   }
 
@@ -89,6 +85,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     });
   }
 
+  // ============ SEND SMS ============
   Future<void> _sendSmsToContacts() async {
     final emergencyProvider = Provider.of<EmergencyProvider>(
       context,
@@ -129,14 +126,19 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✅ SMS sent to $sentCount/${contacts.length} contacts'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+          ),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error sending SMS: ${e.toString()}'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -153,16 +155,46 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
     if (emergency == null) {
       return Scaffold(
+        backgroundColor: AppColors.background,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 60, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text('No active emergency found'),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.error_outline,
+                  size: 60,
+                  color: AppColors.danger,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'No active emergency found',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+                  ),
+                ),
                 child: const Text('GO BACK'),
               ),
             ],
@@ -172,66 +204,147 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
+            // ============ EMERGENCY HEADER with BACK button ============
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red, Colors.redAccent],
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning, color: Colors.white, size: 30),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '🚨 EMERGENCY MODE ACTIVE',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                        Text(
-                          'Started: ${_formatTime(emergency.startTime)}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+              padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+              decoration: BoxDecoration(
+                gradient: AppColors.dangerGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.danger.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
                   ),
-                  const Icon(Icons.location_on, color: Colors.white),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      // ✅ BACK BUTTON
+                      IconButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                        tooltip: 'Go Back',
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'EMERGENCY MODE',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Active • Live Tracking On',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _formatTime(emergency.startTime),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
 
+            // ============ MAP ============
             Expanded(
-              flex: 2,
-              child: position != null
-                  ? GoogleMap(
-                      onMapCreated: (controller) => _mapController = controller,
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(position.latitude, position.longitude),
-                        zoom: 16,
-                      ),
-                      markers: _markers,
-                      myLocationEnabled: true,
-                    )
-                  : const Center(child: CircularProgressIndicator()),
+              flex: 3,
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
+                  boxShadow: AppColors.cardShadow,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
+                  child: position != null
+                      ? GoogleMap(
+                          onMapCreated: (controller) =>
+                              _mapController = controller,
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(
+                              position.latitude,
+                              position.longitude,
+                            ),
+                            zoom: 16,
+                          ),
+                          markers: _markers,
+                          myLocationEnabled: true,
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: false,
+                        )
+                      : const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                ),
+              ),
             ),
 
+            // ============ STATUS CARD ============
             Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(16),
-              color: Colors.grey.shade50,
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+                boxShadow: AppColors.softShadow,
+              ),
               child: Column(
                 children: [
                   Row(
@@ -240,21 +353,47 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                         width: 10,
                         height: 10,
                         decoration: const BoxDecoration(
-                          color: Colors.red,
+                          color: AppColors.danger,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 8),
                       const Text(
                         'Location Sharing: LIVE',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
                       ),
                       const Spacer(),
-                      Text(
-                        _locationUpdate,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
+                      if (_isSendingSms)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _locationUpdate,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMedium,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -262,77 +401,60 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(Icons.people, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Alert sent to: ${emergency.notifiedContacts.length} contacts',
-                        style: const TextStyle(fontSize: 14),
+                      const Icon(
+                        Icons.people_alt_rounded,
+                        size: 16,
+                        color: AppColors.secondary,
                       ),
-                      const Spacer(),
-                      if (_isSendingSms)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Alert sent to ${emergency.notifiedContacts.length} contacts',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textMedium,
                         ),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
 
-            Container(
-              padding: const EdgeInsets.all(16),
+            const SizedBox(height: 12),
+
+            // ============ ACTION BUTTONS ============
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isCapturingImage ? null : _captureImage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: _isCapturingImage
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.camera_alt),
-                      label: const Text('CAPTURE IMAGE'),
+                    child: _buildActionButton(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'CAPTURE',
+                      color: AppColors.primary,
+                      isLoading: _isCapturingImage,
+                      onTap: _isCapturingImage ? null : _captureImage,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isSendingSms ? null : _sendSmsToContacts,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: _isSendingSms
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.sms),
-                      label: const Text('SEND SMS'),
+                    child: _buildActionButton(
+                      icon: Icons.sms_rounded,
+                      label: 'SEND SMS',
+                      color: AppColors.secondary,
+                      isLoading: _isSendingSms,
+                      onTap: _isSendingSms ? null : _sendSmsToContacts,
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Add this in the Column of buttons (below SEND SMS button)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            const SizedBox(height: 12),
+
+            // ============ VIEW REPLIES ============
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -348,36 +470,109 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
+                    backgroundColor: AppColors.warning,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppColors.radiusLarge,
+                      ),
+                    ),
                   ),
-                  icon: const Icon(Icons.chat),
-                  label: const Text('VIEW REPLIES FROM CONTACTS'),
+                  icon: const Icon(Icons.chat_rounded, size: 20),
+                  label: const Text(
+                    'VIEW REPLIES FROM CONTACTS',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                 ),
               ),
             ),
 
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => _stopEmergency(context, emergencyProvider),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text(
-                  '⬛ STOP EMERGENCY',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            const SizedBox(height: 12),
+
+            // ============ STOP EMERGENCY ============
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _stopEmergency(context, emergencyProvider),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.danger,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppColors.radiusLarge,
+                      ),
+                    ),
+                    elevation: 3,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.stop_circle_rounded, size: 22),
+                      SizedBox(width: 8),
+                      Text(
+                        'STOP EMERGENCY',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
+  // ============ ACTION BUTTON WIDGET ============
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isLoading,
+    required VoidCallback? onTap,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+        ),
+      ),
+      icon: isLoading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(icon, size: 20),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  // ============ CAPTURE IMAGE ============
   Future<void> _captureImage() async {
     setState(() => _isCapturingImage = true);
 
@@ -387,21 +582,34 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
       if (image != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('📸 Image captured successfully!')),
+          SnackBar(
+            content: const Text('📸 Image captured successfully!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error capturing image: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error capturing image: $e'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       setState(() => _isCapturingImage = false);
     }
   }
 
+  // ============ STOP EMERGENCY ============
   void _stopEmergency(BuildContext context, EmergencyProvider provider) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
+        ),
         title: const Text('Stop Emergency Mode?'),
         content: const Text('Are you sure you are safe?'),
         actions: [
@@ -412,8 +620,11 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+              ),
             ),
             child: const Text("YES, I'M SAFE"),
           ),

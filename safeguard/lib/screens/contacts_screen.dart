@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/emergency_provider.dart';
 
 class ContactsScreen extends StatefulWidget {
-  const ContactsScreen({Key? key}) : super(key: key);
+  const ContactsScreen({super.key});
 
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -175,7 +175,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selectedRelation,
+                initialValue: _selectedRelation,
                 decoration: const InputDecoration(
                   labelText: 'Relation',
                   prefixIcon: Icon(Icons.family_restroom),
@@ -246,7 +246,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _selectedRelation,
+                initialValue: _selectedRelation,
                 decoration: const InputDecoration(
                   labelText: 'Relation',
                   prefixIcon: Icon(Icons.family_restroom),

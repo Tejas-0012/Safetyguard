@@ -52,6 +52,7 @@ dependencies:
   permission_handler: ^13.0.1
   url_launcher: ^6.3.2
   another_telephony: ^0.4.1
+  
 
 dev_dependencies:
   flutter_test:
@@ -63,6 +64,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -74,7 +76,19 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/icon/safeicon.png
 
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/safeicon.png"
+  min_sdk_android: 21
+  
+  # Optional — adaptive icon for Android (modern devices)
+  adaptive_icon_background: "#0D47A1"
+  adaptive_icon_foreground: "assets/icon/safeicon.png"
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

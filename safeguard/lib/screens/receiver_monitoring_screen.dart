@@ -215,7 +215,7 @@ class _ReceiverMonitoringScreenState extends State<ReceiverMonitoringScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _emergency?.status?.toUpperCase() ?? 'ACTIVE',
+                    _emergency?.status.toUpperCase() ?? 'ACTIVE',
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
@@ -243,15 +243,15 @@ class _ReceiverMonitoringScreenState extends State<ReceiverMonitoringScreen> {
           ),
 
           // Images
-          if (_emergency?.cameraImages?.isNotEmpty == true)
+          if (_emergency?.cameraImages.isNotEmpty == true)
             Container(
               height: 100,
               padding: const EdgeInsets.all(8),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: _emergency!.cameraImages!.length,
+                itemCount: _emergency!.cameraImages.length,
                 itemBuilder: (context, index) {
-                  final image = _emergency!.cameraImages![index];
+                  final image = _emergency!.cameraImages[index];
                   return Container(
                     margin: const EdgeInsets.only(right: 8),
                     width: 100,
