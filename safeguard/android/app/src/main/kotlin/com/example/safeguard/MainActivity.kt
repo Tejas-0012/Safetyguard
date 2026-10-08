@@ -28,20 +28,34 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
+    super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            CHANNEL,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "wasLaunchedFromTile" -> result.success(fromTile)
-                "clearTileLaunch" -> {
-                    fromTile = false
-                    result.success(true)
-                }
-                else -> result.notImplemented()
+    MethodChannel(
+        flutterEngine.dartExecutor.binaryMessenger,
+        CHANNEL,
+    ).setMethodCallHandler { call, result ->
+        when (call.method) {
+            "wasLaunchedFromTile" -> result.success(fromTile)
+            "clearTileLaunch" -> {
+                fromTile = false
+                result.success(true)
             }
+            // ✅ Shake detection
+            "startShakeDetection" -> {
+                ShakeDetectionService.start(this)
+                result.success(true)
+            }
+            "stopShakeDetection" -> {
+                ShakeDetectionService.stop(this)
+                result.success(true)
+            }
+            "isShakeDetectionRunning" -> {
+                val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                val enabled = prefs.getBoolean("flutter.safeguard_shake_enabled", false)
+                result.success(enabled)
+            }
+            else -> result.notImplemented()
         }
     }
+}
 }

@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">SafeGuard</string>
     <string name="sos_tile_label">SafeGuard SOS</string>
+    <string name="widget_description">Tap to send an emergency alert</string>
+    <string name="shake_channel_name">SafeGuard Monitoring</string>
+<string name="shake_channel_desc">Keeps shake detection active</string>
 </resources>

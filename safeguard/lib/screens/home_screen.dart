@@ -8,6 +8,7 @@ import '../providers/location_provider.dart';
 import '../models/user_model.dart';
 import '../services/storage_service.dart';
 import '../services/sos_trigger_service.dart';
+import '../services/shake_service.dart';
 import '../utils/app_colors.dart';
 import 'notifications_screen.dart';
 import 'emergency_monitoring_screen.dart';
@@ -21,25 +22,91 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late GoogleMapController _mapController;
+  bool _isReloading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _setupLocationTracking();
+
+    // ✅ Defer loading until after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadData();
+        _setupLocationTracking();
+      }
+    });
   }
 
-  // ============ DATA ============
-  void _loadData() async {
+  Future<void> _loadData() async {
     final emergencyProvider = Provider.of<EmergencyProvider>(
       context,
       listen: false,
     );
-    emergencyProvider.loadContacts();
-    emergencyProvider.loadHistory();
 
-    // ✅ Load active emergency — turns Home red if any exists
-    await emergencyProvider.loadActiveEmergency();
+    // ✅ Defer each notifyListeners-triggering call with small delays
+    // to avoid setState-during-build
+    await Future.microtask(() => emergencyProvider.loadContacts());
+    await Future.microtask(() => emergencyProvider.loadHistory());
+    await Future.microtask(() => emergencyProvider.loadActiveEmergency());
+  }
+
+  Future<void> _reloadAll() async {
+    if (_isReloading) return;
+
+    setState(() => _isReloading = true);
+
+    try {
+      final emergencyProvider = Provider.of<EmergencyProvider>(
+        context,
+        listen: false,
+      );
+      final locationProvider = Provider.of<LocationProvider>(
+        context,
+        listen: false,
+      );
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Reload everything
+      await Future.wait([
+        emergencyProvider.loadContacts(),
+        emergencyProvider.loadHistory(),
+        emergencyProvider.loadActiveEmergency(),
+        locationProvider.getCurrentLocation(),
+        authProvider.checkAuthStatus(),
+      ]);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Reloaded'),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 1),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reload failed: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isReloading = false);
+    }
   }
 
   void _setupLocationTracking() {
@@ -180,6 +247,32 @@ class _HomeScreenState extends State<HomeScreen> {
         // Action buttons: SOS (small circle) + Notification + Profile
         Row(
           children: [
+            GestureDetector(
+              onTap: _isReloading ? null : _reloadAll,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  shape: BoxShape.circle,
+                  boxShadow: AppColors.softShadow,
+                ),
+                child: _isReloading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.refresh_rounded,
+                        color: AppColors.textDark,
+                        size: 22,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
             // ✅ SMALL CIRCULAR SOS BUTTON
             GestureDetector(
               onTap: _showSOSDialog,
@@ -573,6 +666,10 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           },
         ),
+        const SizedBox(height: 10),
+        _ShakeToggleTile(),
+        const SizedBox(height: 10),
+
         const SizedBox(height: 10),
         _buildActionTile(
           icon: Icons.history_rounded,
@@ -1078,5 +1175,141 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Morning';
     if (hour < 17) return 'Afternoon';
     return 'Evening';
+  }
+}
+
+// ============ SHAKE DETECTION TOGGLE ============
+class _ShakeToggleTile extends StatefulWidget {
+  @override
+  State<_ShakeToggleTile> createState() => _ShakeToggleTileState();
+}
+
+class _ShakeToggleTileState extends State<_ShakeToggleTile> {
+  bool _enabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  Future<void> _checkStatus() async {
+    final running = await ShakeService.isRunning();
+    if (mounted) {
+      setState(() {
+        _enabled = running;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggle() async {
+    setState(() => _loading = true);
+    bool newState;
+    if (_enabled) {
+      await ShakeService.stop();
+      newState = false;
+    } else {
+      await ShakeService.start();
+      newState = true;
+    }
+    if (mounted) {
+      setState(() {
+        _enabled = newState;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newState
+                ? '✅ Shake detection ON — shake 3 times to send SOS'
+                : '🛑 Shake detection OFF',
+          ),
+          backgroundColor: newState ? AppColors.success : AppColors.textMedium,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _loading ? null : _toggle,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+          boxShadow: AppColors.softShadow,
+          border: Border.all(
+            color: _enabled
+                ? AppColors.success.withValues(alpha: 0.3)
+                : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: (_enabled ? AppColors.success : AppColors.textLight)
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+              ),
+              child: Icon(
+                Icons.vibration_rounded,
+                color: _enabled ? AppColors.success : AppColors.textLight,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Shake Detection',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _enabled
+                        ? 'Active — shake 3x to send SOS'
+                        : 'Tap to enable',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _enabled ? AppColors.success : AppColors.textLight,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_loading)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primary,
+                ),
+              )
+            else
+              Switch(
+                value: _enabled,
+                onChanged: (_) => _toggle(),
+                activeThumbColor: AppColors.success,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

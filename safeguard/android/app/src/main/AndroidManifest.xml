@@ -16,12 +16,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_SMS" /> 
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /> 
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
       <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <application
         android:label="safeguard"
-        android:name="${applicationName}"
+        android:name=".SosWidgetApp"
         android:icon="@mipmap/launcher_icon">
 
         <meta-data 
@@ -49,6 +50,30 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- ✅ Home Screen Widget -->
+<receiver
+    android:name=".SosWidgetProvider"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="com.example.safeguard.SOS_WIDGET_TAP" />
+    </intent-filter>
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/sos_widget_info" />
+</receiver>
+
+<!-- ✅ Shake Detection Service -->
+<service
+    android:name=".ShakeDetectionService"
+    android:exported="false"
+    android:foregroundServiceType="specialUse">
+    <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Personal safety monitoring - shake detection for SOS alerts" />
+</service>
+
         <!-- ✅ SafeGuard Quick Settings Tile -->
 <service
     android:name=".SafeGuardTileService"

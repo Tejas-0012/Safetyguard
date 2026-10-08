@@ -7,7 +7,6 @@ import '../providers/emergency_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../models/emergency_model.dart';
-import '../models/user_model.dart';
 
 class ReceiverMonitoringScreen extends StatefulWidget {
   final String emergencyId;

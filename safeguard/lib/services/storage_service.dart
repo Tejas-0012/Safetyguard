@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
@@ -49,6 +47,11 @@ class StorageService {
     await prefs.setBool(_keyShakeEnabled, value);
   }
 
+  Future<bool> isShakeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyShakeEnabled) ?? false;
+  }
+
   Future<void> setBluetoothDeviceId(String deviceId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBluetoothDeviceId, deviceId);
@@ -94,11 +97,6 @@ class StorageService {
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_keyIsLoggedIn) ?? false;
-  }
-
-  Future<bool> isShakeEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyShakeEnabled) ?? false;
   }
 
   Future<String?> getBluetoothDeviceId() async {

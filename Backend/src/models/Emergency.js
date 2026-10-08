@@ -37,24 +37,45 @@ const EmergencyImageSchema = new mongoose.Schema({
 });
 
 // ✅ Sub-schema for receiver replies
-const ReceiverReplySchema = new mongoose.Schema({
+// ✅ Sub-schema for receiver links (one per emergency contact)
+const ReceiverLinkSchema = new mongoose.Schema({
   contactId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Contact',
+    required: true,
   },
   contactName: {
     type: String,
-    default: '',
+    required: true,
   },
-  message: {
+  contactPhone: {
     type: String,
-    required: [true, 'Reply message is required'],
+    required: true,
   },
-  repliedAt: {
+  token: {
+    type: String,
+    required: true,
+  },
+  // Location shared by the receiver (null until they share)
+  location: {
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    accuracy: { type: Number, default: 0 },
+  },
+  lastUpdated: {
     type: Date,
-    default: Date.now,
+    default: null,
   },
-});
+  // Flags
+  linkOpened: {
+    type: Boolean,
+    default: false,
+  },
+  isSharingLocation: {
+    type: Boolean,
+    default: false,
+  },
+}, { _id: false });   // no separate _id
 
 const EmergencySchema = new mongoose.Schema(
   {
@@ -63,14 +84,8 @@ const EmergencySchema = new mongoose.Schema(
       ref: 'User',
       required: [true, 'User ID is required'],
     },
-    startTime: {
-      type: Date,
-      default: Date.now,
-    },
-    endTime: {
-      type: Date,
-      default: null,
-    },
+    startTime: { type: Date, default: Date.now },
+    endTime: { type: Date, default: null },
     status: {
       type: String,
       enum: ['active', 'resolved', 'cancelled'],
@@ -82,30 +97,17 @@ const EmergencySchema = new mongoose.Schema(
       longitude: { type: Number, default: 0 },
     },
     notifiedContacts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Contact',
-      },
+      { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
     ],
     cameraImages: [EmergencyImageSchema],
-    isVideoActive: {
-      type: Boolean,
-      default: false,
-    },
-    // ✅ NEW FIELDS
+    isVideoActive: { type: Boolean, default: false },
     receiverReplies: [ReceiverReplySchema],
-    isWebStreamActive: {
-      type: Boolean,
-      default: false,
-    },
-    webStreamToken: {
-      type: String,
-      default: '',
-    },
+    isWebStreamActive: { type: Boolean, default: false },
+    webStreamToken: { type: String, default: '' },
+
+    receiverLinks: [ReceiverLinkSchema],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
 // Indexes for better performance

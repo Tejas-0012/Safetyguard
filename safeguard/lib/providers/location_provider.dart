@@ -12,8 +12,7 @@ class LocationProvider extends ChangeNotifier {
   bool _isTracking = false;
   String? _error;
 
-  LocationProvider(this._locationService, {StorageService? storage})
-    : _storage = storage {
+  LocationProvider(this._locationService, {this._storage}) {
     _initialize();
   }
 
@@ -40,7 +39,7 @@ class LocationProvider extends ChangeNotifier {
 
       // ✅ Save immediately after getting location
       if (_storage != null) {
-        await _storage!.saveLastLocation(position.latitude, position.longitude);
+        await _storage.saveLastLocation(position.latitude, position.longitude);
         print(
           '💾 Saved initial location: ${position.latitude}, ${position.longitude}',
         );
@@ -66,7 +65,7 @@ class LocationProvider extends ChangeNotifier {
 
         // ✅ Save to SharedPreferences on every update
         if (_storage != null) {
-          _storage!.saveLastLocation(position.latitude, position.longitude);
+          _storage.saveLastLocation(position.latitude, position.longitude);
         }
       });
     } catch (e) {

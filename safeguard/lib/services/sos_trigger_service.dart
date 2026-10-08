@@ -25,12 +25,10 @@ class SosTriggerService {
   final StorageService _storage;
 
   SosTriggerService({
-    required ApiService apiService,
+    required this._apiService,
     required SmsService smsService,
-    required StorageService storage,
-  }) : _apiService = apiService,
-       _smsService = smsService,
-       _storage = storage;
+    required this._storage,
+  }) : _smsService = smsService;
 
   // ============ MAIN ENTRY POINT ============
   /// Trigger SOS with default behavior (all contacts, no camera/video)

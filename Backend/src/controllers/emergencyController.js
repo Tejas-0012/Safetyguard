@@ -50,33 +50,63 @@ exports.startEmergency = async (req, res) => {
     });
 
     const notifiedContacts = [];
-    for (const contact of contacts) {
-      try {
-        await sendEmergencyNotification({
-          contact,
-          userName: user.name,
-          location: { latitude, longitude },
-          emergencyId: emergency._id
-        });
-        notifiedContacts.push(contact._id);
-      } catch (error) {
-        console.error(`Failed to notify ${contact.name}:`, error.message);
-      }
-    }
+const receiverLinks = [];
 
-    emergency.notifiedContacts = notifiedContacts;
-    await emergency.save();
-
-    res.status(201).json({
-      success: true,
-      emergency: {
-        id: emergency._id,
-        status: emergency.status,
-        startTime: emergency.startTime,
-        currentLocation: emergency.currentLocation,
-        notifiedContacts: notifiedContacts
-      }
+// ✅ Generate a unique token + link per contact
+for (const contact of contacts) {
+  try {
+    // Send FCM notification
+    await sendEmergencyNotification({
+      contact,
+      userName: user.name,
+      location: { latitude, longitude },
+      emergencyId: emergency._id,
     });
+    notifiedContacts.push(contact._id);
+
+    // ✅ Generate unique token for THIS contact
+    const token = crypto.randomBytes(16).toString('hex');
+
+    receiverLinks.push({
+      contactId: contact._id,
+      contactName: contact.name,
+      contactPhone: contact.phone,
+      token: token,
+      location: { latitude: null, longitude: null, accuracy: 0 },
+      lastUpdated: null,
+      linkOpened: false,
+      isSharingLocation: false,
+    });
+  } catch (error) {
+    console.error(`Failed to notify ${contact.name}:`, error.message);
+  }
+}
+
+emergency.notifiedContacts = notifiedContacts;
+emergency.receiverLinks = receiverLinks;
+await emergency.save();
+
+// ✅ Build the base URL for personalized links
+const baseUrl = process.env.FRONTEND_URL || 'http://10.112.210.187:5000';
+
+// ✅ Return receiverLinks so Flutter can build personalized SMS
+res.status(201).json({
+  success: true,
+  emergency: {
+    id: emergency._id,
+    status: emergency.status,
+    startTime: emergency.startTime,
+    currentLocation: emergency.currentLocation,
+    notifiedContacts: notifiedContacts,
+  },
+  receiverLinks: receiverLinks.map((link) => ({
+    contactId: link.contactId,
+    contactName: link.contactName,
+    contactPhone: link.contactPhone,
+    token: link.token,
+    webUrl: `${baseUrl}/receiver/${link.token}`,
+  })),
+});
 
   } catch (error) {
     console.error('Start emergency error:', error);
@@ -285,6 +315,90 @@ exports.getHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Server error getting history',
+    });
+  }
+};
+
+// ============ ✅ GET RECEIVER INFO BY TOKEN ============
+// @desc    Get emergency + receiver info from a unique token
+// @route   GET /api/emergency/receiver/:token
+// @access  Public (via token)
+exports.getReceiverByToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Find emergency containing this token in receiverLinks
+    const emergency = await Emergency.findOne({
+      'receiverLinks.token': token,
+    })
+      .populate('userId', 'name phone')
+      .populate('notifiedContacts', 'name phone');
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link',
+      });
+    }
+
+    if (emergency.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Emergency has ended',
+      });
+    }
+
+    // Find this specific receiver's link data
+    const link = emergency.receiverLinks.find((l) => l.token === token);
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: 'Receiver not found',
+      });
+    }
+
+    // ✅ Mark as opened (only once)
+    if (!link.linkOpened) {
+      link.linkOpened = true;
+      await emergency.save();
+      console.log(`✅ Link opened by: ${link.contactName}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      receiver: {
+        contactName: link.contactName,
+        contactPhone: link.contactPhone,
+        token: link.token,
+        isSharingLocation: link.isSharingLocation,
+      },
+      emergency: {
+        id: emergency._id,
+        userName: emergency.userId ? emergency.userId.name : 'Unknown',
+        userPhone: emergency.userId ? emergency.userId.phone : '',
+        startTime: emergency.startTime,
+        status: emergency.status,
+        currentLocation: emergency.currentLocation,
+        locationPoints: emergency.locationPoints.slice(-30),
+        cameraImages: emergency.cameraImages,
+        isVideoActive: emergency.isVideoActive,
+        receiverReplies: emergency.receiverReplies || [],
+        // ✅ Show all receivers' locations to the receiver too (optional)
+        otherReceivers: emergency.receiverLinks
+          .filter((l) => l.token !== token)
+          .map((l) => ({
+            contactName: l.contactName,
+            location: l.location,
+            lastUpdated: l.lastUpdated,
+            isSharingLocation: l.isSharingLocation,
+          })),
+      },
+    });
+  } catch (error) {
+    console.error('Get receiver by token error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
@@ -633,6 +747,111 @@ exports.webReply = async (req, res) => {
     });
   }
 };
+
+// ============ ✅ RECEIVER SHARES LOCATION ============
+// @desc    Receiver shares their live location via token
+// @route   POST /api/emergency/receiver/:token/location
+// @access  Public (via token)
+exports.updateReceiverLocation = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { latitude, longitude, accuracy } = req.body;
+
+    if (
+      latitude === undefined ||
+      longitude === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required',
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      'receiverLinks.token': token,
+      status: 'active',
+    });
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link',
+      });
+    }
+
+    const link = emergency.receiverLinks.find((l) => l.token === token);
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: 'Receiver not found',
+      });
+    }
+
+    // Update location
+    link.location = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      accuracy: parseFloat(accuracy) || 0,
+    };
+    link.lastUpdated = new Date();
+    link.isSharingLocation = true;
+
+    await emergency.save();
+
+    console.log(
+      `📍 ${link.contactName} shared location: ${latitude}, ${longitude}`
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Location updated',
+      location: link.location,
+    });
+  } catch (error) {
+    console.error('Update receiver location error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ============ ✅ RECEIVER STOPS SHARING ============
+// @desc    Receiver stops sharing their location
+// @route   POST /api/emergency/receiver/:token/stop-sharing
+// @access  Public (via token)
+exports.stopReceiverSharing = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const emergency = await Emergency.findOne({
+      'receiverLinks.token': token,
+    });
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link',
+      });
+    }
+
+    const link = emergency.receiverLinks.find((l) => l.token === token);
+    if (link) {
+      link.isSharingLocation = false;
+      await emergency.save();
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Stop receiver sharing error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 // ============ ✅ NEW: GET EMERGENCY DETAILS FOR APP ============
 // @desc    Get emergency details for app user
 // @route   GET /api/emergency/:id/details
@@ -713,3 +932,4 @@ async function sendEmergencyNotification({
     return false;
   }
 }
+

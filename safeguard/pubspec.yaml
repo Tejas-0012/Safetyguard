@@ -52,6 +52,8 @@ dependencies:
   permission_handler: ^13.0.1
   url_launcher: ^6.3.2
   another_telephony: ^0.4.1
+  sensors_plus: ^6.0.0             # Accelerometer
+  flutter_foreground_task: ^8.0.0
   
 
 dev_dependencies:
