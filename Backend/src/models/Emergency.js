@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+// ============ SUB-SCHEMAS ============
+
 // Sub-schema for location points
 const LocationPointSchema = new mongoose.Schema({
   latitude: {
@@ -37,6 +39,25 @@ const EmergencyImageSchema = new mongoose.Schema({
 });
 
 // ✅ Sub-schema for receiver replies
+const ReceiverReplySchema = new mongoose.Schema({
+  contactId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Contact',
+  },
+  contactName: {
+    type: String,
+    default: 'Contact',
+  },
+  message: {
+    type: String,
+    required: true,
+  },
+  repliedAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
 // ✅ Sub-schema for receiver links (one per emergency contact)
 const ReceiverLinkSchema = new mongoose.Schema({
   contactId: {
@@ -56,7 +77,6 @@ const ReceiverLinkSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  // Location shared by the receiver (null until they share)
   location: {
     latitude: { type: Number, default: null },
     longitude: { type: Number, default: null },
@@ -66,7 +86,6 @@ const ReceiverLinkSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
-  // Flags
   linkOpened: {
     type: Boolean,
     default: false,
@@ -75,7 +94,9 @@ const ReceiverLinkSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-}, { _id: false });   // no separate _id
+}, { _id: false });
+
+// ============ MAIN SCHEMA ============
 
 const EmergencySchema = new mongoose.Schema(
   {
@@ -104,24 +125,23 @@ const EmergencySchema = new mongoose.Schema(
     receiverReplies: [ReceiverReplySchema],
     isWebStreamActive: { type: Boolean, default: false },
     webStreamToken: { type: String, default: '' },
-
     receiverLinks: [ReceiverLinkSchema],
   },
   { timestamps: true }
 );
 
-// Indexes for better performance
+// ============ INDEXES ============
 EmergencySchema.index({ userId: 1, status: 1 });
 EmergencySchema.index({ startTime: -1 });
 EmergencySchema.index({ webStreamToken: 1 });
+EmergencySchema.index({ 'receiverLinks.token': 1 });
 
-// Virtual for duration
+// ============ VIRTUALS ============
 EmergencySchema.virtual('duration').get(function () {
   if (!this.endTime) return null;
   return this.endTime - this.startTime;
 });
 
-// Ensure virtuals are included in JSON output
 EmergencySchema.set('toJSON', { virtuals: true });
 EmergencySchema.set('toObject', { virtuals: true });
 
