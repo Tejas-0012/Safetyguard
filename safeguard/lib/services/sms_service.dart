@@ -80,6 +80,26 @@ class SmsService {
     return await sendSms(phoneNumber: contactPhone, message: message);
   }
 
+  // ✅ NEW: Send personalized emergency SMS with receiver's name + own token
+  Future<bool> sendPersonalizedEmergencyAlert({
+    required String contactName,
+    required String contactPhone,
+    required String userName,
+    required String webUrl,
+  }) async {
+    print('📱 ===== SENDING PERSONALIZED SMS =====');
+    print('📱 Contact: $contactName');
+    print('📱 Phone: $contactPhone');
+    print('📱 Web URL: $webUrl');
+
+    // ✅ Personalized message with contact's name
+    final message =
+        'Hi $contactName, $userName has activated an SOS alert! '
+        'Please help. Track live: $webUrl';
+
+    return await sendSms(phoneNumber: contactPhone, message: message);
+  }
+
   // ✅ NEW: Listen for incoming SMS replies
   void listenForReplies(Function(String sender, String message) onReply) {
     _telephony.listenIncomingSms(

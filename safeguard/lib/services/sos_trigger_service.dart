@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/contact_model.dart';
+import '../models/emergency_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
@@ -102,55 +103,41 @@ class SosTriggerService {
         );
       }
 
-      // ============ 3. GENERATE WEB LINK ============
-      String webUrl = '';
-      try {
-        final webResult = await _apiService.generateWebStream(emergencyId);
-        if (webResult['success'] == true) {
-          webUrl = webResult['webUrl'] ?? '';
-        }
-      } catch (_) {
-        // Continue without web link
-      }
+      // ============ 3. USE RECEIVER LINKS FROM BACKEND ============
+      // ✅ The backend now returns a personalized link per contact
+      final receiverLinks =
+          (emergencyResponse['receiverLinks'] as List?)
+              ?.map((r) => ReceiverLink.fromJson(r))
+              .toList() ??
+          [];
 
-      // ============ 4. SEND SMS TO CONTACTS ============
+      print('📱 Received ${receiverLinks.length} receiver links from backend');
+
+      // ============ 4. SEND PERSONALIZED SMS TO CONTACTS ============
       final userName = await _storage.getUserName() ?? 'User';
       int smsSent = 0;
-      int totalContacts = 0;
+      int totalContacts = receiverLinks.length;
 
-      if (customContacts != null && customContacts.isNotEmpty) {
-        totalContacts = customContacts.length;
-        for (final contact in customContacts) {
-          final ok = await _sendSmsToContact(
-            contact: contact,
-            userName: userName,
-            latitude: position.latitude,
-            longitude: position.longitude,
-            emergencyId: emergencyId,
-            webUrl: webUrl,
-          );
-          if (ok) smsSent++;
+      for (final link in receiverLinks) {
+        // ✅ Filter by customContacts if provided
+        if (customContacts != null && customContacts.isNotEmpty) {
+          final isSelected = customContacts.any((c) => c.id == link.contactId);
+          if (!isSelected) continue;
         }
-      } else {
-        // Fetch contacts from backend
-        final contactsResponse = await _apiService.getContacts();
-        if (contactsResponse['success'] == true) {
-          final contacts = (contactsResponse['contacts'] as List)
-              .map((c) => EmergencyContact.fromJson(c))
-              .toList();
-          totalContacts = contacts.length;
 
-          for (final contact in contacts) {
-            final ok = await _sendSmsToContact(
-              contact: contact,
-              userName: userName,
-              latitude: position.latitude,
-              longitude: position.longitude,
-              emergencyId: emergencyId,
-              webUrl: webUrl,
-            );
-            if (ok) smsSent++;
-          }
+        try {
+          final phoneNumber = _cleanPhone(link.contactPhone);
+
+          final ok = await _smsService.sendPersonalizedEmergencyAlert(
+            contactName: link.contactName,
+            contactPhone: phoneNumber,
+            userName: userName,
+            webUrl: link.webUrl,
+          );
+
+          if (ok) smsSent++;
+        } catch (e) {
+          print('❌ SMS error for ${link.contactName}: $e');
         }
       }
 
@@ -168,40 +155,6 @@ class SosTriggerService {
   }
 
   // ============ HELPER: Send SMS to one contact ============
-  Future<bool> _sendSmsToContact({
-    required EmergencyContact contact,
-    required String userName,
-    required double latitude,
-    required double longitude,
-    required String emergencyId,
-    required String webUrl,
-  }) async {
-    try {
-      final phone = _cleanPhone(contact.phone);
-      if (webUrl.isNotEmpty) {
-        return await _smsService.sendEmergencyAlertWithWebLink(
-          contactName: contact.name,
-          contactPhone: phone,
-          userName: userName,
-          latitude: latitude,
-          longitude: longitude,
-          emergencyId: emergencyId,
-          webUrl: webUrl,
-        );
-      } else {
-        return await _smsService.sendEmergencyAlert(
-          contactName: contact.name,
-          contactPhone: phone,
-          userName: userName,
-          latitude: latitude,
-          longitude: longitude,
-          emergencyId: emergencyId,
-        );
-      }
-    } catch (_) {
-      return false;
-    }
-  }
 
   // ============ HELPER: Clean phone ============
   String _cleanPhone(String phone) {

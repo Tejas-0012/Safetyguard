@@ -124,6 +124,10 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ Store receiverLinks for the current emergency
+  List<ReceiverLink> _currentReceiverLinks = [];
+  List<ReceiverLink> get currentReceiverLinks => _currentReceiverLinks;
+
   Future<bool> startEmergency(double latitude, double longitude) async {
     try {
       _isLoading = true;
@@ -137,6 +141,17 @@ class EmergencyProvider extends ChangeNotifier {
 
       if (response['success'] == true) {
         _currentEmergency = Emergency.fromJson(response['emergency']);
+
+        // ✅ Capture the receiverLinks array (per-contact tokens)
+        if (response['receiverLinks'] is List) {
+          _currentReceiverLinks = (response['receiverLinks'] as List)
+              .map((r) => ReceiverLink.fromJson(r))
+              .toList();
+          print('✅ Captured ${_currentReceiverLinks.length} receiver links');
+        } else {
+          _currentReceiverLinks = [];
+        }
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -184,6 +199,7 @@ class EmergencyProvider extends ChangeNotifier {
       final response = await _apiService.stopEmergency(emergencyId);
       if (response['success'] == true) {
         _currentEmergency = null;
+        _currentReceiverLinks = [];
         await loadHistory();
       } else {
         _error = response['message'] ?? 'Failed to stop emergency';

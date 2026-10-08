@@ -113,6 +113,7 @@ class Emergency {
   final List<ReceiverReply> receiverReplies; // ✅ Now ReceiverReply is defined
   final bool isWebStreamActive;
   final String webStreamToken;
+  final List<ReceiverLink> receiverLinks;
 
   Emergency({
     required this.id,
@@ -129,6 +130,7 @@ class Emergency {
     this.receiverReplies = const [],
     this.isWebStreamActive = false,
     this.webStreamToken = '',
+    this.receiverLinks = const [],
   });
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
@@ -180,6 +182,11 @@ class Emergency {
           : [],
       isWebStreamActive: json['isWebStreamActive'] ?? false,
       webStreamToken: json['webStreamToken']?.toString() ?? '',
+      receiverLinks: json['receiverLinks'] is List
+          ? (json['receiverLinks'] as List)
+                .map((r) => ReceiverLink.fromJson(r))
+                .toList()
+          : [],
     );
   }
 
@@ -200,5 +207,32 @@ class Emergency {
       'isWebStreamActive': isWebStreamActive,
       'webStreamToken': webStreamToken,
     };
+  }
+}
+
+// ============ RECEIVER LINK ============
+class ReceiverLink {
+  final String contactId;
+  final String contactName;
+  final String contactPhone;
+  final String token;
+  final String webUrl;
+
+  ReceiverLink({
+    required this.contactId,
+    required this.contactName,
+    required this.contactPhone,
+    required this.token,
+    required this.webUrl,
+  });
+
+  factory ReceiverLink.fromJson(Map<String, dynamic> json) {
+    return ReceiverLink(
+      contactId: json['contactId']?.toString() ?? '',
+      contactName: json['contactName'] ?? '',
+      contactPhone: json['contactPhone'] ?? '',
+      token: json['token'] ?? '',
+      webUrl: json['webUrl'] ?? '',
+    );
   }
 }

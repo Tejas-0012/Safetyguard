@@ -1,30 +1,34 @@
 // ============================================
-// SafeGuard - Receiver Web Page (FIXED)
+// SafeGuard - Receiver Web Page (PHASE 2)
 // ============================================
 
 const token = window.location.pathname.split('/').pop();
 
 let emergency = null;
+let receiver = null;
 let map = null;
 let marker = null;
+let otherMarkers = {};
 let updateInterval = null;
-let isFetching = false;  // ✅ Prevent overlapping requests
+let isFetching = false;
+let isSharingLocation = false;
+let locationWatchId = null;
 
 // DOM Elements
 const loading = document.getElementById('loading');
 const content = document.getElementById('content');
 
 // ============================================
-// Fetch Emergency Data (Safe)
+// Fetch Emergency Data (NEW ENDPOINT)
 // ============================================
 
 async function fetchEmergencyData() {
-    // ✅ Prevent overlapping fetches
     if (isFetching) return;
     isFetching = true;
 
     try {
-        const response = await fetch(`/api/emergency/web/${token}`);
+        // ✅ NEW ENDPOINT
+        const response = await fetch(`/api/emergency/receiver/${token}`);
         const data = await response.json();
 
         if (!data.success) {
@@ -33,18 +37,18 @@ async function fetchEmergencyData() {
         }
 
         emergency = data.emergency;
+        receiver = data.receiver;
         renderUI();
 
     } catch (error) {
         console.error('Error fetching:', error);
-        // Don't spam — wait for next interval
     } finally {
         isFetching = false;
     }
 }
 
 // ============================================
-// Render UI (Safe — No Duplicate Map)
+// Render UI
 // ============================================
 
 function renderUI() {
@@ -53,16 +57,30 @@ function renderUI() {
     loading.style.display = 'none';
     content.style.display = 'block';
 
+    // ✅ Personalized greeting from receiver info
+    const greeting = document.getElementById('greeting');
+    if (greeting && receiver) {
+        greeting.textContent = `Hi ${receiver.contactName}, ${emergency.userName} needs your help.`;
+    }
+
     // Sender info
-    document.getElementById('senderName').textContent = emergency.userName || 'Unknown';
-    document.getElementById('senderPhone').textContent = '📱 ' + (emergency.userPhone || 'No phone');
-    document.getElementById('avatar').textContent = (emergency.userName || 'U')[0].toUpperCase();
+    const senderName = document.getElementById('senderName');
+    if (senderName) senderName.textContent = emergency.userName || 'Unknown';
+
+    const senderPhone = document.getElementById('senderPhone');
+    if (senderPhone) senderPhone.textContent = '📱 ' + (emergency.userPhone || 'No phone');
+
+    const avatar = document.getElementById('avatar');
+    if (avatar) avatar.textContent = (emergency.userName || 'U')[0].toUpperCase();
 
     // Stats
-    document.getElementById('updateCount').textContent = emergency.locationPoints?.length || 0;
-    document.getElementById('imageCount').textContent = emergency.cameraImages?.length || 0;
+    const updateCount = document.getElementById('updateCount');
+    if (updateCount) updateCount.textContent = emergency.locationPoints?.length || 0;
 
-    // ✅ Map — Only initialize ONCE
+    const imageCount = document.getElementById('imageCount');
+    if (imageCount) imageCount.textContent = emergency.cameraImages?.length || 0;
+
+    // Map
     updateMap();
 
     // Images
@@ -75,18 +93,22 @@ function renderUI() {
     const statusValue = document.getElementById('statusValue');
     const statusBadge = document.getElementById('statusBadge');
     if (emergency.status === 'active') {
-        statusValue.textContent = '🔴 Active';
-        statusValue.style.color = '#ff1744';
-        statusBadge.textContent = '● ACTIVE';
+        if (statusValue) {
+            statusValue.textContent = '🔴 Active';
+            statusValue.style.color = '#ff1744';
+        }
+        if (statusBadge) statusBadge.textContent = '● ACTIVE';
     } else {
-        statusValue.textContent = '✅ Resolved';
-        statusValue.style.color = '#00c853';
-        statusBadge.textContent = '● RESOLVED';
+        if (statusValue) {
+            statusValue.textContent = '✅ Resolved';
+            statusValue.style.color = '#00c853';
+        }
+        if (statusBadge) statusBadge.textContent = '● RESOLVED';
     }
 }
 
 // ============================================
-// Map (Initialize Once)
+// Map
 // ============================================
 
 function updateMap() {
@@ -95,7 +117,6 @@ function updateMap() {
     const loc = emergency.currentLocation;
     const pos = { lat: loc.latitude, lng: loc.longitude };
 
-    // ✅ Initialize map only once
     if (!map) {
         map = new google.maps.Map(document.getElementById('map'), {
             zoom: 15,
@@ -119,30 +140,105 @@ function updateMap() {
                 scale: 10,
             }
         });
-
-        // Draw path once
-        if (emergency.locationPoints && emergency.locationPoints.length > 1) {
-            const path = emergency.locationPoints.map(p => ({
-                lat: p.latitude,
-                lng: p.longitude
-            }));
-            new google.maps.Polyline({
-                path: path,
-                strokeColor: '#ff1744',
-                strokeOpacity: 0.8,
-                strokeWeight: 3,
-                map: map,
-            });
-        }
     } else {
-        // ✅ Just update marker position
         marker.setPosition(pos);
         map.panTo(pos);
+    }
+
+    // ✅ Show other receivers on the map (Phase 3 preview)
+    if (emergency.otherReceivers && Array.isArray(emergency.otherReceivers)) {
+        emergency.otherReceivers.forEach((other) => {
+            if (!other.location || other.location.latitude == null) return;
+            const otherPos = { lat: other.location.latitude, lng: other.location.longitude };
+
+            if (otherMarkers[other.contactName]) {
+                otherMarkers[other.contactName].setPosition(otherPos);
+            } else {
+                otherMarkers[other.contactName] = new google.maps.Marker({
+                    position: otherPos,
+                    map: map,
+                    title: other.contactName,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#2196F3',
+                        fillOpacity: 0.9,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
+                        scale: 8,
+                    }
+                });
+            }
+        });
     }
 }
 
 // ============================================
-// Images (Only Update If Changed)
+// Location Sharing (Phase 3 preview)
+// ============================================
+
+async function startSharingLocation() {
+    if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        return;
+    }
+
+    isSharingLocation = true;
+
+    // Update UI
+    const btn = document.getElementById('shareLocationBtn');
+    if (btn) {
+        btn.textContent = '🛑 Stop Sharing';
+        btn.style.background = '#e53935';
+    }
+
+    // Watch position and send to backend
+    locationWatchId = navigator.geolocation.watchPosition(
+        async (position) => {
+            try {
+                await fetch(`/api/emergency/receiver/${token}/location`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                    }),
+                });
+                console.log('📍 Location shared:', position.coords.latitude, position.coords.longitude);
+            } catch (e) {
+                console.error('Failed to send location:', e);
+            }
+        },
+        (error) => console.error('Geolocation error:', error),
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+    );
+}
+
+async function stopSharingLocation() {
+    isSharingLocation = false;
+
+    if (locationWatchId !== null) {
+        navigator.geolocation.clearWatch(locationWatchId);
+        locationWatchId = null;
+    }
+
+    try {
+        await fetch(`/api/emergency/receiver/${token}/stop-sharing`, {
+            method: 'POST',
+        });
+    } catch (e) {
+        console.error('Failed to stop sharing:', e);
+    }
+
+    const btn = document.getElementById('shareLocationBtn');
+    if (btn) {
+        btn.textContent = '📍 Share My Location';
+        btn.style.background = '#00897b';
+    }
+}
+
+// ============================================
+// Images
 // ============================================
 
 let lastImageCount = 0;
@@ -157,16 +253,14 @@ function updateImages() {
     const container = document.getElementById('imagesContainer');
     const grid = document.getElementById('imageGrid');
 
-    if (imageCount > 0) {
+    if (imageCount > 0 && container && grid) {
         container.style.display = 'block';
         grid.innerHTML = imgs.map(img => `<img src="${img.url}" />`).join('');
-    } else {
-        container.style.display = 'none';
     }
 }
 
 // ============================================
-// Replies (Only Update If Changed)
+// Replies
 // ============================================
 
 let lastReplyCount = 0;
@@ -179,10 +273,11 @@ function updateReplies() {
     lastReplyCount = replyCount;
 
     const list = document.getElementById('repliesList');
+    if (!list) return;
+
     list.innerHTML = replies.map(r => `
         <div class="reply-item">
             <span><b>${r.contactName || 'Viewer'}:</b> ${r.message}</span>
-            <span class="time">${formatTime(new Date(r.repliedAt))}</span>
         </div>
     `).join('');
 }
@@ -191,46 +286,36 @@ function updateReplies() {
 // Send Reply
 // ============================================
 
-document.getElementById('sendReplyBtn').addEventListener('click', sendReply);
-
-document.getElementById('replyInput').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendReply();
-});
-
 async function sendReply() {
     const input = document.getElementById('replyInput');
-    const message = input.value.trim();
+    const message = input?.value.trim();
     if (!message) return;
 
     try {
         const response = await fetch(`/api/emergency/web/${token}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, viewerName: 'Web Viewer' })
+            body: JSON.stringify({
+                message,
+                viewerName: receiver?.contactName || 'Web Viewer'
+            })
         });
 
         const data = await response.json();
-
         if (data.success) {
             input.value = '';
-            // ✅ Immediately refresh to show new reply
             await fetchEmergencyData();
         } else {
             alert('Failed: ' + (data.message || 'Unknown error'));
         }
     } catch (e) {
         console.error('Reply error:', e);
-        alert('Failed to send reply');
     }
 }
 
 // ============================================
 // Helpers
 // ============================================
-
-function formatTime(date) {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
 
 function showError(message) {
     loading.innerHTML = `
@@ -252,11 +337,23 @@ if (!token || token === 'receiver.html') {
     showError('Invalid link. Please use the link from the SMS.');
 } else {
     fetchEmergencyData();
-    // ✅ Poll every 8 seconds (slower = less browser load)
     updateInterval = setInterval(fetchEmergencyData, 8000);
 }
 
-// ✅ Stop polling when page closes
+// Bind buttons
+document.getElementById('sendReplyBtn')?.addEventListener('click', sendReply);
+document.getElementById('replyInput')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendReply();
+});
+document.getElementById('shareLocationBtn')?.addEventListener('click', () => {
+    if (isSharingLocation) {
+        stopSharingLocation();
+    } else {
+        startSharingLocation();
+    }
+});
+
 window.addEventListener('beforeunload', () => {
     if (updateInterval) clearInterval(updateInterval);
+    if (locationWatchId) navigator.geolocation.clearWatch(locationWatchId);
 });
