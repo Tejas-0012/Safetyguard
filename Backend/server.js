@@ -15,6 +15,8 @@ const emergencyRoutes = require('./src/routes/emergencyRoutes');
 const errorHandler = require('./src/middleware/errorHandler');
 
 const app = express();
+app.set('trust proxy', 1);
+
 
 // ============ HELMET WITH CSP DISABLED ============
 // Google Maps script is blocked by default CSP.
@@ -50,6 +52,8 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,  // ✅ Increased for polling from receiver page
 });
+
+
 app.use('/api', limiter);
 
 // ============ API ROUTES ============
