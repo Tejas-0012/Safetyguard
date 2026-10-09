@@ -75,13 +75,24 @@ class ReceiverReply {
   });
 
   factory ReceiverReply.fromJson(Map<String, dynamic> json) {
+    // ✅ Handle contactId being either String or Map (populated)
+    String contactId = '';
+    final rawContactId = json['contactId'];
+    if (rawContactId is String) {
+      contactId = rawContactId;
+    } else if (rawContactId is Map<String, dynamic>) {
+      contactId = rawContactId['_id']?.toString() ?? '';
+    } else if (rawContactId != null) {
+      contactId = rawContactId.toString();
+    }
+
     return ReceiverReply(
       id: json['_id'] ?? json['id'] ?? '',
-      contactId: json['contactId'] ?? '',
+      contactId: contactId,
       contactName: json['contactName'] ?? 'Contact',
       message: json['message'] ?? '',
       repliedAt: json['repliedAt'] != null
-          ? DateTime.parse(json['repliedAt'])
+          ? DateTime.tryParse(json['repliedAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }
@@ -160,11 +171,11 @@ class Emergency {
           ? LocationPoint.fromJson(json['currentLocation'])
           : null,
       notifiedContacts: json['notifiedContacts'] is List
-          ? (json['notifiedContacts'] as List)
-                .map(
-                  (c) => c is Map ? (c['_id'] ?? '').toString() : c.toString(),
-                )
-                .toList()
+          ? (json['notifiedContacts'] as List).map((c) {
+              if (c is String) return c;
+              if (c is Map<String, dynamic>) return c['_id']?.toString() ?? '';
+              return c.toString();
+            }).toList()
           : [],
       cameraImages: json['cameraImages'] is List
           ? (json['cameraImages'] as List)
@@ -245,7 +256,18 @@ class ReceiverLink {
       latitude != null && longitude != null && isSharingLocation;
 
   factory ReceiverLink.fromJson(Map<String, dynamic> json) {
-    // Handle location being nested or flat
+    // ✅ Handle contactId being String OR Map
+    String contactId = '';
+    final rawContactId = json['contactId'];
+    if (rawContactId is String) {
+      contactId = rawContactId;
+    } else if (rawContactId is Map<String, dynamic>) {
+      contactId = rawContactId['_id']?.toString() ?? '';
+    } else if (rawContactId != null) {
+      contactId = rawContactId.toString();
+    }
+
+    // Handle location
     double? lat;
     double? lng;
     double? acc;
@@ -269,17 +291,17 @@ class ReceiverLink {
     }
 
     return ReceiverLink(
-      contactId: json['contactId']?.toString() ?? '',
-      contactName: json['contactName'] ?? '',
-      contactPhone: json['contactPhone'] ?? '',
-      token: json['token'] ?? '',
-      webUrl: json['webUrl'] ?? '',
+      contactId: contactId,
+      contactName: json['contactName']?.toString() ?? '',
+      contactPhone: json['contactPhone']?.toString() ?? '',
+      token: json['token']?.toString() ?? '',
+      webUrl: json['webUrl']?.toString() ?? '',
       latitude: lat,
       longitude: lng,
       accuracy: acc,
       lastUpdated: updated,
-      linkOpened: json['linkOpened'] ?? false,
-      isSharingLocation: json['isSharingLocation'] ?? false,
+      linkOpened: json['linkOpened'] == true,
+      isSharingLocation: json['isSharingLocation'] == true,
     );
   }
 }
