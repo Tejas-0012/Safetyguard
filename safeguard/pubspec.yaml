@@ -80,6 +80,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/safeicon.png
+    - assets/icon/person_maker.png
 
 
 flutter_launcher_icons:

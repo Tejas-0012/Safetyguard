@@ -312,6 +312,17 @@ class EmergencyProvider extends ChangeNotifier {
     }
   }
 
+  /// ✅ Fetch full emergency details (including receiver locations)
+  Future<Map<String, dynamic>> getEmergencyDetails(String emergencyId) async {
+    try {
+      final response = await _apiService.getEmergencyDetails(emergencyId);
+      return response;
+    } catch (e) {
+      print('getEmergencyDetails error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../utils/app_colors.dart';
+import '../models/emergency_model.dart';
 import 'emergency_replies_screen.dart';
 
 class EmergencyModeScreen extends StatefulWidget {
@@ -18,11 +22,14 @@ class EmergencyModeScreen extends StatefulWidget {
 }
 
 class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
+  Timer? _refreshTimer;
+  List<ReceiverLink> _receiverLinks = [];
   late GoogleMapController _mapController;
   Set<Marker> _markers = {};
   String _locationUpdate = 'Updating...';
   bool _isCapturingImage = false;
   bool _isSendingSms = false;
+  BitmapDescriptor? _personIcon;
 
   LocationProvider? _locationProvider;
   EmergencyProvider? _emergencyProvider;
@@ -30,14 +37,86 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadPersonIcon();
     _setupEmergencyTracking();
+
+    // ✅ Poll backend for receiver locations every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) return;
+      _refreshReceiverLocations();
+    });
+  }
+
+  Future<void> _loadPersonIcon() async {
+    // ⚠️ Temporarily disable custom PNG (bad image caused marker crash)
+    // Use Google's built-in blue marker instead
+    if (mounted) {
+      setState(() {
+        _personIcon = BitmapDescriptor.defaultMarkerWithHue(
+          BitmapDescriptor.hueAzure,
+        );
+      });
+      print('✅ Using default blue marker (custom PNG disabled)');
+    }
+  }
+
+  Future<void> _refreshReceiverLocations() async {
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+    final emergencyId = provider.currentEmergency?.id;
+    if (emergencyId == null) {
+      print('❌ No emergencyId');
+      return;
+    }
+
+    try {
+      final response = await provider.getEmergencyDetails(emergencyId);
+      print('🔄 getEmergencyDetails success: ${response['success']}');
+
+      if (response['success'] == true && response['emergency'] != null) {
+        final em = Emergency.fromJson(response['emergency']);
+        print('📱 Receiver links received: ${em.receiverLinks.length}');
+
+        for (final link in em.receiverLinks) {
+          print(
+            '   - ${link.contactName}: '
+            'linkOpened=${link.linkOpened}, '
+            'hasLocation=${link.hasLocation}, '
+            'lat=${link.latitude}, '
+            'lng=${link.longitude}, '
+            'isSharing=${link.isSharingLocation}',
+          );
+        }
+
+        if (mounted) {
+          setState(() {
+            _receiverLinks = em.receiverLinks;
+          });
+          // ✅ Rebuild markers after updating receiver links
+          final victimPos = _locationProvider?.currentPosition;
+          if (victimPos != null) {
+            _buildAllMarkers(LatLng(victimPos.latitude, victimPos.longitude));
+          }
+        }
+      } else {
+        print('❌ getEmergencyDetails failed: ${response['message']}');
+      }
+    } catch (e) {
+      print('❌ Failed to refresh receiver locations: $e');
+    }
+  }
+
+  Future<BitmapDescriptor> _getPersonMarkerIcon() async {
+    return await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(size: Size(48, 48)),
+      'assets/icon/person_marker.png',
+    );
   }
 
   void _onLocationChanged() {
     final position = _locationProvider?.currentPosition;
     if (position != null && _emergencyProvider?.currentEmergency != null) {
       _updateLocation(position.latitude, position.longitude);
-      _updateMarker(LatLng(position.latitude, position.longitude));
+      _buildAllMarkers(LatLng(position.latitude, position.longitude));
 
       _emergencyProvider!.updateEmergencyLocation(
         _emergencyProvider!.currentEmergency!.id,
@@ -45,6 +124,104 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
         position.longitude,
       );
     }
+  }
+
+  Widget _buildReceiverStatusCard() {
+    final victimPos = _locationProvider?.currentPosition;
+    if (victimPos == null) return const SizedBox.shrink();
+
+    // Only show if at least one receiver has opened the link
+    final activeReceivers = _receiverLinks.where((l) => l.linkOpened).toList();
+    if (activeReceivers.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+        boxShadow: AppColors.softShadow,
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.help_center, color: AppColors.success, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Help is on the way!',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...activeReceivers.map((link) {
+            String distanceText = 'Location pending';
+            double? etaMinutes;
+
+            if (link.hasLocation) {
+              final distance = Geolocator.distanceBetween(
+                victimPos.latitude,
+                victimPos.longitude,
+                link.latitude!,
+                link.longitude!,
+              );
+              distanceText = _formatDistance(distance);
+              // Assume average speed of 40 km/h
+              etaMinutes = (distance / 1000) / 40 * 60;
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person,
+                    size: 18,
+                    color: link.hasLocation
+                        ? AppColors.primary
+                        : AppColors.textLight,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      link.contactName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    link.hasLocation && etaMinutes != null
+                        ? '$distanceText • ~${etaMinutes.toStringAsFixed(0)} min'
+                        : 'Link opened',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: link.hasLocation
+                          ? AppColors.success
+                          : AppColors.textLight,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  String _formatDistance(double meters) {
+    if (meters < 1000) return '${meters.toStringAsFixed(0)} m';
+    return '${(meters / 1000).toStringAsFixed(1)} km';
   }
 
   void _setupEmergencyTracking() {
@@ -60,6 +237,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
     super.dispose();
   }
@@ -71,18 +249,52 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     });
   }
 
-  void _updateMarker(LatLng position) {
-    if (!mounted) return;
-    setState(() {
-      _markers = {
+  void _buildAllMarkers(LatLng victimPos) {
+    final Set<Marker> newMarkers = {};
+
+    // ✅ Victim marker (red)
+    newMarkers.add(
+      Marker(
+        markerId: const MarkerId('victim'),
+        position: victimPos,
+        infoWindow: const InfoWindow(title: 'You'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+    );
+
+    // ✅ Receiver markers (blue person icons + name)
+    for (final link in _receiverLinks) {
+      if (!link.hasLocation) continue;
+
+      final position = LatLng(link.latitude!, link.longitude!);
+      final distanceMeters = Geolocator.distanceBetween(
+        victimPos.latitude,
+        victimPos.longitude,
+        position.latitude,
+        position.longitude,
+      );
+
+      newMarkers.add(
         Marker(
-          markerId: const MarkerId('emergency_location'),
+          markerId: MarkerId('receiver_${link.token}'),
           position: position,
-          infoWindow: const InfoWindow(title: 'Your Location'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: InfoWindow(
+            title: link.contactName,
+            snippet: '${_formatDistance(distanceMeters)} away',
+          ),
+          // ✅ Use built-in info icon (person) with blue hue
+          icon:
+              _personIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         ),
-      };
-    });
+      );
+    }
+
+    if (mounted) {
+      setState(() {
+        _markers = newMarkers;
+      });
+    }
   }
 
   // ============ SEND SMS ============
@@ -335,7 +547,9 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                 ),
               ),
             ),
-
+            // ✅ Receiver status card (below map)
+            _buildReceiverStatusCard(),
+            const SizedBox(height: 8),
             // ============ STATUS CARD ============
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),

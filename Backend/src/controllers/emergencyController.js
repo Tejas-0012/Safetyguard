@@ -484,7 +484,90 @@ exports.addImage = async (req, res) => {
     });
   }
 };
+// ============ ✅ RECEIVER REPLY (via unique token) ============
+// @desc    Receiver replies to emergency using their unique token
+// @route   POST /api/emergency/receiver/:token/reply
+// @access  Public (via token)
+exports.replyFromReceiver = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { message, viewerName } = req.body;
 
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reply message is required'
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      'receiverLinks.token': token,
+      status: 'active',
+    });
+
+    if (!emergency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired link'
+      });
+    }
+
+    const link = emergency.receiverLinks.find((l) => l.token === token);
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        message: 'Receiver not found'
+      });
+    }
+
+    // ✅ Use the pre-saved contact name (no need for viewerName from frontend)
+    const contactName = link.contactName;
+
+    emergency.receiverReplies.push({
+      contactId: link.contactId,
+      contactName: contactName,
+      message: message,
+    });
+    await emergency.save();
+
+    // ✅ Notify the sender via FCM
+    const sender = await User.findById(emergency.userId);
+    if (sender) {
+      try {
+        await messaging.send({
+          notification: {
+            title: '📩 Reply from Contact',
+            body: `${contactName} says: "${message}"`,
+          },
+          data: {
+            type: 'reply',
+            emergencyId: emergency._id.toString(),
+            contactName: contactName,
+            message: message,
+          },
+          topic: `user_${sender._id}`,
+        });
+      } catch (fcmError) {
+        console.log('FCM notify sender error:', fcmError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      reply: {
+        contactName: contactName,
+        message: message,
+        repliedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error('Receiver reply error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 // ============ ✅ NEW: RECEIVER REPLY ============
 // @desc    Receiver replies to emergency
 // @route   POST /api/emergency/:id/reply

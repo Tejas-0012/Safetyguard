@@ -106,6 +106,11 @@ class ApiService {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> getEmergencyDetails(String id) async {
+    final response = await _dio.get('/emergency/$id/details');
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> stopEmergency(String id) async {
     final response = await _dio.post('/emergency/$id/stop');
     return response.data;

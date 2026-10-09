@@ -292,7 +292,8 @@ async function sendReply() {
     if (!message) return;
 
     try {
-        const response = await fetch(`/api/emergency/web/${token}/reply`, {
+        // ✅ Use the NEW /receiver/:token endpoint
+        const response = await fetch(`/api/emergency/receiver/${token}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

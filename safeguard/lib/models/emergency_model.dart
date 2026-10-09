@@ -211,12 +211,20 @@ class Emergency {
 }
 
 // ============ RECEIVER LINK ============
+// ============ RECEIVER LINK ============
 class ReceiverLink {
   final String contactId;
   final String contactName;
   final String contactPhone;
   final String token;
   final String webUrl;
+  // ✅ NEW — location shared by receiver
+  final double? latitude;
+  final double? longitude;
+  final double? accuracy;
+  final DateTime? lastUpdated;
+  final bool linkOpened;
+  final bool isSharingLocation;
 
   ReceiverLink({
     required this.contactId,
@@ -224,15 +232,54 @@ class ReceiverLink {
     required this.contactPhone,
     required this.token,
     required this.webUrl,
+    this.latitude,
+    this.longitude,
+    this.accuracy,
+    this.lastUpdated,
+    this.linkOpened = false,
+    this.isSharingLocation = false,
   });
 
+  /// Does this receiver currently have a known location?
+  bool get hasLocation =>
+      latitude != null && longitude != null && isSharingLocation;
+
   factory ReceiverLink.fromJson(Map<String, dynamic> json) {
+    // Handle location being nested or flat
+    double? lat;
+    double? lng;
+    double? acc;
+    DateTime? updated;
+
+    if (json['location'] is Map<String, dynamic>) {
+      final loc = json['location'] as Map<String, dynamic>;
+      lat = loc['latitude'] != null
+          ? (loc['latitude'] as num).toDouble()
+          : null;
+      lng = loc['longitude'] != null
+          ? (loc['longitude'] as num).toDouble()
+          : null;
+      acc = loc['accuracy'] != null
+          ? (loc['accuracy'] as num).toDouble()
+          : null;
+    }
+
+    if (json['lastUpdated'] != null) {
+      updated = DateTime.tryParse(json['lastUpdated'].toString());
+    }
+
     return ReceiverLink(
       contactId: json['contactId']?.toString() ?? '',
       contactName: json['contactName'] ?? '',
       contactPhone: json['contactPhone'] ?? '',
       token: json['token'] ?? '',
       webUrl: json['webUrl'] ?? '',
+      latitude: lat,
+      longitude: lng,
+      accuracy: acc,
+      lastUpdated: updated,
+      linkOpened: json['linkOpened'] ?? false,
+      isSharingLocation: json['isSharingLocation'] ?? false,
     );
   }
 }

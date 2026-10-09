@@ -17,12 +17,14 @@ const {
   getReceiverByToken,
   updateReceiverLocation,
   stopReceiverSharing,
+  replyFromReceiver,
 } = require('../controllers/emergencyController');
 
 // ============ PUBLIC ROUTES (no auth) ============
 router.get('/receiver/:token', getReceiverByToken);
 router.post('/receiver/:token/location', updateReceiverLocation);
 router.post('/receiver/:token/stop-sharing', stopReceiverSharing);
+router.post('/receiver/:token/reply', replyFromReceiver);
 
 router.get('/web/:token', getEmergencyByToken);
 router.post('/web/:token/reply', webReply);
