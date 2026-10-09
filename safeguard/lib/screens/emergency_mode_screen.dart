@@ -11,6 +11,7 @@ import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../utils/app_colors.dart';
+import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
 import 'emergency_replies_screen.dart';
 
@@ -703,6 +704,24 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   ),
                 ),
               ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ✅ NEW: EMERGENCY CALL BUTTONS
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+                boxShadow: AppColors.softShadow,
+                border: Border.all(
+                  color: AppColors.danger.withValues(alpha: 0.2),
+                  width: 1.5,
+                ),
+              ),
+              child: const EmergencyCallButtons(compact: false),
             ),
 
             const SizedBox(height: 12),

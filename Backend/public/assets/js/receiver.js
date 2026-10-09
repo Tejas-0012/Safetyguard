@@ -19,6 +19,48 @@ const loading = document.getElementById('loading');
 const content = document.getElementById('content');
 
 // ============================================
+// Emergency Call Buttons
+// ============================================
+
+const EMERGENCY_NUMBERS = [
+    { label: 'Police', number: '100', icon: '🚓', color: '#1E88E5' },
+    { label: 'Ambulance', number: '108', icon: '🚑', color: '#43A047' },
+    { label: 'Fire', number: '101', icon: '🔥', color: '#F57C00' },
+    { label: 'All Emergency', number: '112', icon: '🆘', color: '#E53935' },
+    { label: 'Women Helpline', number: '1091', icon: '👩', color: '#8E24AA' },
+    { label: 'Domestic Abuse', number: '181', icon: '🛡️', color: '#D81B60' },
+];
+
+function renderEmergencyButtons() {
+    const container = document.getElementById('emergencyButtons');
+    if (!container) return;
+
+    container.innerHTML = EMERGENCY_NUMBERS.map((e) => `
+        <a href="tel:${e.number}" style="
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            padding:12px 6px;
+            background:${e.color}1a;
+            border:1.5px solid ${e.color}4d;
+            border-radius:12px;
+            text-decoration:none;
+            color:${e.color};
+            font-weight:600;
+            transition:transform 0.15s;
+        " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            <span style="font-size:22px;margin-bottom:4px;">${e.icon}</span>
+            <span style="font-size:10px;text-align:center;line-height:1.2;">${e.label}</span>
+            <span style="font-size:13px;font-weight:800;margin-top:2px;">${e.number}</span>
+        </a>
+    `).join('');
+}
+
+// Call it when page loads
+renderEmergencyButtons();
+
+// ============================================
 // Fetch Emergency Data (NEW ENDPOINT)
 // ============================================
 

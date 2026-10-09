@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../providers/emergency_provider.dart';
 import '../utils/app_colors.dart';
+import '../widgets/emergency_call_buttons.dart';
 import 'emergency_mode_screen.dart';
 
 class EmergencyMonitoringScreen extends StatefulWidget {
