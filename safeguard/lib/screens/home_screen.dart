@@ -10,6 +10,8 @@ import '../services/storage_service.dart';
 import '../services/sos_trigger_service.dart';
 import '../services/shake_service.dart';
 import '../utils/app_colors.dart';
+import '../widgets/emergency_call_buttons.dart';
+import '../services/emergency_call_service.dart';
 import 'notifications_screen.dart';
 import 'emergency_monitoring_screen.dart';
 
@@ -179,30 +181,29 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // 1️⃣ HEADER
               _buildHeader(authProvider.user),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
 
               // 2️⃣ STATUS CARD
               _buildSafetyStatusCard(emergencyProvider.isEmergencyActive),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              // 5️⃣ QUICK ACTIONS (moved BELOW map + SOS)
+              _buildQuickActions(),
 
-              // 3️⃣ MAP
-              _buildMapSection(position, markers),
-
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
               // 4️⃣ SOS BUTTON (Big bar)
               _buildSOSButton(),
 
               const SizedBox(height: 24),
 
-              // 5️⃣ QUICK ACTIONS (moved BELOW map + SOS)
-              _buildQuickActions(),
+              // 3️⃣ MAP
+              _buildMapSection(position, markers),
 
               const SizedBox(height: 32),
             ],
@@ -419,7 +420,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 22,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 6),
+              const SizedBox(height: 5),
               Expanded(
                 child: Text(
                   isEmergencyActive ? 'Emergency Active' : 'Safety Status',
@@ -432,12 +434,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Text(
             isEmergencyActive ? "You're in EMERGENCY MODE" : "You're safe!",
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -452,7 +454,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           // ✅ NEW (tappable when emergency is active)
           GestureDetector(
             onTap: () {
@@ -628,49 +630,18 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitle: 'Manage trusted contacts',
           onTap: () => Navigator.pushNamed(context, '/contacts'),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildActionTile(
-          icon: Icons.notifications_active_rounded,
+          icon: Icons.phone_in_talk_rounded,
           iconColor: AppColors.danger,
-          title: 'Notifications',
-          subtitle: 'Replies & emergency history',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const NotificationsScreen(),
-              ),
-            );
-          },
+          title: 'Emergency Services',
+          subtitle: 'Call police, ambulance & more',
+          onTap: () => _showEmergencyServicesSheet(context),
         ),
-        const SizedBox(height: 10),
-        _buildActionTile(
-          icon: Icons.location_on_rounded,
-          iconColor: AppColors.secondary,
-          title: 'Share Live Location',
-          subtitle: 'Send to emergency contacts',
-          onTap: () {
-            final location = Provider.of<LocationProvider>(
-              context,
-              listen: false,
-            ).currentPosition;
-            if (location != null) {
-              _mapController.animateCamera(
-                CameraUpdate.newCameraPosition(
-                  CameraPosition(
-                    target: LatLng(location.latitude, location.longitude),
-                    zoom: 16,
-                  ),
-                ),
-              );
-            }
-          },
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _ShakeToggleTile(),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
-        const SizedBox(height: 10),
         _buildActionTile(
           icon: Icons.history_rounded,
           iconColor: AppColors.warning,
@@ -996,6 +967,92 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  // ============ EMERGENCY SERVICES SHEET ============
+  void _showEmergencyServicesSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.textLight.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            // Title
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.phone_in_talk,
+                    color: AppColors.danger,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Emergency Services',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Tap to call. Confirmation required.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Emergency buttons grid
+            const EmergencyCallButtons(compact: false),
+
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
