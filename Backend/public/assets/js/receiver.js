@@ -31,6 +31,18 @@ const EMERGENCY_NUMBERS = [
     { label: 'Domestic Abuse', number: '181', icon: '🛡️', color: '#D81B60' },
 ];
 
+// ✅ Format any date as IST time
+function formatIST(dateString) {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+    });
+}
+
 function renderEmergencyButtons() {
     const container = document.getElementById('emergencyButtons');
     if (!container) return;
@@ -341,9 +353,15 @@ const label = img.camera === 'front'
     ? '🤳 Front' 
     : img.camera === 'back' 
         ? '📷 Back' 
-        : '📷 Photo';                const time = img.capturedAt
-                    ? new Date(img.capturedAt).toLocaleTimeString()
-                    : '';
+        : '📷 Photo';                
+        // ✅ Force IST timezone
+const time = new Date(img.capturedAt).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+});
                 return `
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <img src="${img.url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px;border:1px solid #eee;">
