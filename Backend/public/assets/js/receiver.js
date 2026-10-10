@@ -346,22 +346,23 @@ function updateImages() {
     if (imageCount > 0 && container && grid) {
         container.style.display = 'block';
         grid.innerHTML = imgs
-            .slice()  // copy array
-            .reverse()  // newest first
+            .slice()
+            .reverse()
             .map((img) => {
-const label = img.camera === 'front' 
-    ? '🤳 Front' 
-    : img.camera === 'back' 
-        ? '📷 Back' 
-        : '📷 Photo';                
-        // ✅ Force IST timezone
-const time = new Date(img.capturedAt).toLocaleTimeString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-});
+                const label = img.camera === 'front'
+                    ? '🤳 Front'
+                    : img.camera === 'back'
+                        ? '📷 Back'
+                        : '📷 Photo';
+                
+                const time = new Date(img.capturedAt).toLocaleTimeString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                });
+
                 return `
                     <div style="display:flex;flex-direction:column;gap:4px;">
                         <img src="${img.url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px;border:1px solid #eee;">
@@ -374,6 +375,7 @@ const time = new Date(img.capturedAt).toLocaleTimeString('en-IN', {
             .join('');
     }
 }
+
 
 // ============================================
 // Replies
