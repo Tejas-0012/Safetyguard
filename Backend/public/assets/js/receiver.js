@@ -337,8 +337,11 @@ function updateImages() {
             .slice()  // copy array
             .reverse()  // newest first
             .map((img) => {
-                const label = img.camera === 'front' ? '🤳 Front' : '📷 Back';
-                const time = img.capturedAt
+const label = img.camera === 'front' 
+    ? '🤳 Front' 
+    : img.camera === 'back' 
+        ? '📷 Back' 
+        : '📷 Photo';                const time = img.capturedAt
                     ? new Date(img.capturedAt).toLocaleTimeString()
                     : '';
                 return `

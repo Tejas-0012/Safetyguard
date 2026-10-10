@@ -62,6 +62,20 @@ const EmergencyImageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  // ✅ NEW fields
+  camera: {
+    type: String,
+    enum: ['front', 'back', 'unknown'],
+    default: 'unknown',
+  },
+  captureIndex: {
+    type: Number,
+    default: 0,
+  },
+  sizeBytes: {
+    type: Number,
+    default: 0,
+  },
 });
 
 // ✅ Sub-schema for receiver replies
