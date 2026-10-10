@@ -21,8 +21,6 @@ class CameraCaptureService {
     ..options.connectTimeout = const Duration(seconds: 30)
     ..options.receiveTimeout = const Duration(seconds: 60);
 
-  CameraController? _frontController;
-  CameraController? _backController;
   Timer? _captureTimer;
   String? _emergencyId;
   String? _authToken;
@@ -31,7 +29,7 @@ class CameraCaptureService {
 
   // Max photos to prevent infinite storage use
   static const int _maxCaptures = 10;
-  static const int _intervalSeconds = 30;
+  static const int _intervalSeconds = 15;
 
   bool get isRunning => _isRunning;
   int get captureIndex => _captureIndex;
@@ -70,6 +68,10 @@ class CameraCaptureService {
       );
 
       print('📸 Camera auto-capture started for emergency $emergencyId');
+      final now = DateTime.now();
+      print('🕐 Local: $now');
+      print('🕐 ISO:   ${now.toIso8601String()}');
+      print('🕐 UTC:   ${now.toUtc().toIso8601String()}');
       return true;
     } catch (e) {
       print('❌ Failed to start auto-capture: $e');
@@ -86,50 +88,41 @@ class CameraCaptureService {
     _captureTimer?.cancel();
     _captureTimer = null;
 
-    await _disposeControllers();
-
     print('🛑 Camera auto-capture stopped');
   }
 
   // ============ INTERNAL ============
+  CameraDescription? _frontCam;
+  CameraDescription? _backCam;
+
   Future<void> _initializeControllers(List<CameraDescription> cameras) async {
-    final frontCam = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
-    final backCam = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.back,
-      orElse: () => cameras.first,
-    );
+    print('📸 Available cameras:');
+    for (final c in cameras) {
+      print(
+        '   - ${c.name}, lens: ${c.lensDirection}, sensor: ${c.sensorOrientation}',
+      );
+    }
 
-    _frontController = CameraController(
-      frontCam,
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-
-    _backController = CameraController(
-      backCam,
-      ResolutionPreset.medium,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-
-    await _frontController!.initialize();
-    await _backController!.initialize();
-
-    print('📸 Cameras initialized');
-  }
-
-  Future<void> _disposeControllers() async {
+    // Find front camera (if it exists)
     try {
-      await _frontController?.dispose();
-      await _backController?.dispose();
-      _frontController = null;
-      _backController = null;
+      _frontCam = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+      );
+      print('✅ Front camera: ${_frontCam!.name}');
     } catch (e) {
-      print('⚠️ Error disposing controllers: $e');
+      _frontCam = null;
+      print('⚠️ No front camera available');
+    }
+
+    // Find back camera
+    try {
+      _backCam = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+      );
+      print('✅ Back camera: ${_backCam!.name}');
+    } catch (e) {
+      _backCam = cameras.first;
+      print('⚠️ No back camera — using default');
     }
   }
 
@@ -146,32 +139,53 @@ class CameraCaptureService {
 
     // Alternate between front and back
     final useFront = _captureIndex % 2 == 0;
-    final controller = useFront ? _frontController : _backController;
+    final camera = useFront ? _frontCam : _backCam;
     final label = useFront ? 'front' : 'back';
 
-    if (controller == null || !controller.value.isInitialized) {
-      print('⚠️ $label camera not ready');
+    if (camera == null) {
+      print('⚠️ $label camera not available — skipping');
+      _captureIndex++;
       return;
     }
 
+    // ✅ Create a FRESH controller for this capture
+    CameraController? controller;
     try {
+      controller = CameraController(
+        camera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      await controller.initialize();
+
+      // ✅ Wait for camera to stabilize (fixes "capture not returned yet")
+      await Future.delayed(const Duration(milliseconds: 800));
+
       final XFile photo = await controller.takePicture();
       final file = File(photo.path);
 
       final sizeKB = (await file.length()) ~/ 1024;
       if (sizeKB < 5) {
-        print('⏭️ Photo too small, skipping');
+        print('⏭️ $label photo too small, skipping');
+        await file.delete();
+        _captureIndex++;
         return;
       }
 
       await _uploadPhoto(file: file, camera: label, index: _captureIndex);
 
       await file.delete();
-      print('✅ Photo $_captureIndex ($label) uploaded');
+      print('✅ Photo $_captureIndex ($label) uploaded (${sizeKB}KB)');
 
       _captureIndex++;
     } catch (e) {
       print('❌ Capture error ($label): $e');
+      _captureIndex++; // Still increment to avoid infinite retry
+    } finally {
+      // ✅ Dispose the controller before next capture
+      await controller?.dispose();
     }
   }
 

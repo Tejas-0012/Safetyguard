@@ -1027,6 +1027,8 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   }
 
   String _formatTime(DateTime date) {
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    // ✅ Convert UTC → Local before displaying
+    final local = date.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }

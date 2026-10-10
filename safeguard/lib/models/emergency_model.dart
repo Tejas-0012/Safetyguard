@@ -20,7 +20,7 @@ class LocationPoint {
       longitude: json['longitude']?.toDouble() ?? 0.0,
       accuracy: json['accuracy']?.toDouble(),
       timestamp: json['timestamp'] != null
-          ? DateTime.parse(json['timestamp'])
+          ? DateTime.parse(json['timestamp']).toLocal()
           : DateTime.now(),
     );
   }
@@ -47,7 +47,7 @@ class EmergencyImage {
     return EmergencyImage(
       url: json['url'] ?? '',
       capturedAt: json['capturedAt'] != null
-          ? DateTime.parse(json['capturedAt'])
+          ? DateTime.parse(json['capturedAt']).toLocal()
           : DateTime.now(),
     );
   }
@@ -92,7 +92,8 @@ class ReceiverReply {
       contactName: json['contactName'] ?? 'Contact',
       message: json['message'] ?? '',
       repliedAt: json['repliedAt'] != null
-          ? DateTime.tryParse(json['repliedAt'].toString()) ?? DateTime.now()
+          ? DateTime.tryParse(json['repliedAt'].toString())?.toLocal() ??
+                DateTime.now()
           : DateTime.now(),
     );
   }
@@ -156,10 +157,10 @@ class Emergency {
       id: (json['id'] ?? json['_id'] ?? '').toString(),
       userId: parsedUserId,
       startTime:
-          DateTime.tryParse(json['startTime']?.toString() ?? '') ??
+          DateTime.tryParse(json['startTime']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
       endTime: json['endTime'] != null
-          ? DateTime.tryParse(json['endTime'].toString())
+          ? DateTime.tryParse(json['endTime'].toString())?.toLocal()
           : null,
       status: json['status'] ?? 'active',
       locationPoints: json['locationPoints'] is List
@@ -184,7 +185,7 @@ class Emergency {
           : [],
       isVideoActive: json['isVideoActive'] ?? false,
       createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())
+          ? DateTime.tryParse(json['createdAt'].toString())?.toLocal()
           : null,
       receiverReplies: json['receiverReplies'] is List
           ? (json['receiverReplies'] as List)
@@ -221,7 +222,6 @@ class Emergency {
   }
 }
 
-// ============ RECEIVER LINK ============
 // ============ RECEIVER LINK ============
 class ReceiverLink {
   final String contactId;
