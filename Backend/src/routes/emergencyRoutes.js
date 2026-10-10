@@ -24,6 +24,7 @@ const {
   replyFromReceiver,
   getReplies,
   uploadAudioChunk,
+  uploadEmergencyImage,
 } = require('../controllers/emergencyController');
 
 // ============ MULTER CONFIG FOR AUDIO UPLOADS ============
@@ -46,6 +47,26 @@ const audioStorage = multer.diskStorage({
 const audioUpload = multer({
   storage: audioStorage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+});
+
+// ✅ Multer for images
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/images');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const emergencyId = req.params.id;
+    const camera = req.body.camera || 'unknown';
+    const idx = req.body.captureIndex || '0';
+    cb(null, `emergency_${emergencyId}_${camera}_${idx}_${Date.now()}.jpg`);
+  },
+});
+
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 // ============ PUBLIC ROUTES (no auth) ============
@@ -71,6 +92,12 @@ router.post('/:id/reply', protect, replyToEmergency);
 router.post('/:id/web-stream', protect, generateWebStream);
 router.get('/:id/details', protect, getEmergencyDetails);
 router.get('/:id/replies', protect, getReplies);
+router.post(
+  '/:id/auto-image',
+  protect,
+  imageUpload.single('image'),
+  uploadEmergencyImage
+);
 
 // ============ GENERIC ROUTE (must be LAST) ============
 router.get('/:id', protect, getEmergencyStatus);

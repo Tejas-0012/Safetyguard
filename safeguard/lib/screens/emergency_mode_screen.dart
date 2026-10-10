@@ -12,6 +12,7 @@ import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../services/audio_recording_service.dart';
+import '../services/camera_capture_service.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
@@ -35,6 +36,8 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   BitmapDescriptor? _personIcon;
   final AudioRecordingService _audioService = AudioRecordingService();
   bool _isRecordingAudio = false;
+  final CameraCaptureService _cameraService = CameraCaptureService();
+  bool _isAutoCapturing = false;
 
   LocationProvider? _locationProvider;
   EmergencyProvider? _emergencyProvider;
@@ -54,6 +57,10 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     // ✅ Start audio recording after slight delay (wait for emergency to load)
     Future.delayed(const Duration(seconds: 2), () {
       _startAudioRecording();
+    });
+    // ✅ Start camera auto-capture after audio starts
+    Future.delayed(const Duration(seconds: 4), () {
+      _startCameraCapture();
     });
   }
 
@@ -76,6 +83,26 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
     if (mounted) {
       setState(() => _isRecordingAudio = started);
+    }
+  }
+
+  Future<void> _startCameraCapture() async {
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+    final emergencyId = provider.currentEmergency?.id;
+    final token = await _getAuthToken();
+
+    if (emergencyId == null || token == null) {
+      print('❌ Cannot start camera: missing emergencyId or token');
+      return;
+    }
+
+    final started = await _cameraService.start(
+      emergencyId: emergencyId,
+      authToken: token,
+    );
+
+    if (mounted) {
+      setState(() => _isAutoCapturing = started);
     }
   }
 
@@ -165,6 +192,165 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
         position.longitude,
       );
     }
+  }
+
+  // ============ EMERGENCY HEADER ============
+  Widget _buildEmergencyHeader(dynamic emergency) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+      decoration: BoxDecoration(
+        gradient: AppColors.dangerGradient,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.danger.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              // ✅ BACK BUTTON
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+                tooltip: 'Go Back',
+              ),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EMERGENCY MODE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Active • Live Tracking On',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              // Time chip
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _formatTime(emergency.startTime),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              // ✅ REC indicator (if recording)
+              if (_isRecordingAudio) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'REC',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              // ✅ CAM indicator (if auto-capturing)
+              if (_isAutoCapturing) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.camera_alt,
+                        color: Colors.white,
+                        size: 10,
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'CAM',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildReceiverStatusCard() {
@@ -281,6 +467,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     _refreshTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
     _stopAudioAndDispose();
+    _cameraService.stop();
     super.dispose();
   }
 
@@ -418,6 +605,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     final locationProvider = Provider.of<LocationProvider>(context);
     final position = locationProvider.currentPosition;
 
+    // ============ EMPTY STATE ============
     if (emergency == null) {
       return Scaffold(
         backgroundColor: AppColors.background,
@@ -468,389 +656,186 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       );
     }
 
+    // ============ EMERGENCY MODE ============
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // ============ EMERGENCY HEADER with BACK button ============
+            // ============ 1. FIXED HEADER ============
+            _buildEmergencyHeader(emergency),
+
+            // ============ 2. FIXED MAP (260px height) ============
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              height: 240,
               decoration: BoxDecoration(
-                gradient: AppColors.dangerGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.danger.withValues(alpha: 0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
+                boxShadow: AppColors.cardShadow,
               ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      // ✅ BACK BUTTON
-                      IconButton(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
+                child: position != null
+                    ? GoogleMap(
+                        onMapCreated: (controller) =>
+                            _mapController = controller,
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(position.latitude, position.longitude),
+                          zoom: 16,
+                        ),
+                        markers: _markers,
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                      )
+                    : const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
+                      ),
+              ),
+            ),
+
+            // ============ 3. SCROLLABLE CONTENT BELOW MAP ============
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Receiver status card
+                    _buildReceiverStatusCard(),
+
+                    // Spacing
+                    const SizedBox(height: 12),
+
+                    // Status card (Location + contacts)
+                    _buildStatusCard(emergency),
+
+                    const SizedBox(height: 12),
+
+                    // Action buttons (Capture + Send SMS)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildActionButton(
+                            icon: Icons.camera_alt_rounded,
+                            label: 'CAPTURE',
+                            color: AppColors.primary,
+                            isLoading: _isCapturingImage,
+                            onTap: _isCapturingImage ? null : _captureImage,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildActionButton(
+                            icon: Icons.sms_rounded,
+                            label: 'SEND SMS',
+                            color: AppColors.secondary,
+                            isLoading: _isSendingSms,
+                            onTap: _isSendingSms ? null : _sendSmsToContacts,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // View Replies button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
                         onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: Colors.white,
-                          size: 26,
-                        ),
-                        tooltip: 'Go Back',
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.warning_amber_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'EMERGENCY MODE',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                letterSpacing: 1,
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EmergencyRepliesScreen(
+                                emergencyId: emergency.id,
+                                emergencyTitle: 'Emergency',
                               ),
                             ),
-                            SizedBox(height: 2),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.warning,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppColors.radiusLarge,
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.chat_rounded, size: 20),
+                        label: const Text(
+                          'VIEW REPLIES FROM CONTACTS',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Emergency call buttons card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(
+                          AppColors.radiusLarge,
+                        ),
+                        boxShadow: AppColors.softShadow,
+                        border: Border.all(
+                          color: AppColors.danger.withValues(alpha: 0.2),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const EmergencyCallButtons(compact: false),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Stop Emergency button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () =>
+                            _stopEmergency(context, emergencyProvider),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.danger,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppColors.radiusLarge,
+                            ),
+                          ),
+                          elevation: 3,
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.stop_circle_rounded, size: 22),
+                            SizedBox(width: 8),
                             Text(
-                              'Active • Live Tracking On',
+                              'STOP EMERGENCY',
                               style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          _formatTime(emergency.startTime),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      if (_isRecordingAudio) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Text(
-                                'REC',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // ============ MAP ============
-            Expanded(
-              flex: 3,
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
-                  boxShadow: AppColors.cardShadow,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppColors.radiusXLarge),
-                  child: position != null
-                      ? GoogleMap(
-                          onMapCreated: (controller) =>
-                              _mapController = controller,
-                          initialCameraPosition: CameraPosition(
-                            target: LatLng(
-                              position.latitude,
-                              position.longitude,
-                            ),
-                            zoom: 16,
-                          ),
-                          markers: _markers,
-                          myLocationEnabled: true,
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: false,
-                        )
-                      : const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
-                          ),
-                        ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            // ✅ Receiver status card (below map)
-            _buildReceiverStatusCard(),
-            const SizedBox(height: 8),
-            // ============ STATUS CARD ============
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(AppColors.radiusLarge),
-                boxShadow: AppColors.softShadow,
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: AppColors.danger,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Location Sharing: LIVE',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (_isSendingSms)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 16,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _locationUpdate,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMedium,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.people_alt_rounded,
-                        size: 16,
-                        color: AppColors.secondary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Alert sent to ${emergency.notifiedContacts.length} contacts',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ============ ACTION BUTTONS ============
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.camera_alt_rounded,
-                      label: 'CAPTURE',
-                      color: AppColors.primary,
-                      isLoading: _isCapturingImage,
-                      onTap: _isCapturingImage ? null : _captureImage,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.sms_rounded,
-                      label: 'SEND SMS',
-                      color: AppColors.secondary,
-                      isLoading: _isSendingSms,
-                      onTap: _isSendingSms ? null : _sendSmsToContacts,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ============ VIEW REPLIES ============
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EmergencyRepliesScreen(
-                          emergencyId: emergency.id,
-                          emergencyTitle: 'Emergency',
-                        ),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.warning,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppColors.radiusLarge,
-                      ),
-                    ),
-                  ),
-                  icon: const Icon(Icons.chat_rounded, size: 20),
-                  label: const Text(
-                    'VIEW REPLIES FROM CONTACTS',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ✅ NEW: EMERGENCY CALL BUTTONS
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(AppColors.radiusLarge),
-                boxShadow: AppColors.softShadow,
-                border: Border.all(
-                  color: AppColors.danger.withValues(alpha: 0.2),
-                  width: 1.5,
-                ),
-              ),
-              child: const EmergencyCallButtons(compact: false),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ============ STOP EMERGENCY ============
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _stopEmergency(context, emergencyProvider),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.danger,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppColors.radiusLarge,
-                      ),
-                    ),
-                    elevation: 3,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.stop_circle_rounded, size: 22),
-                      SizedBox(width: 8),
-                      Text(
-                        'STOP EMERGENCY',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -920,6 +905,87 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     } finally {
       setState(() => _isCapturingImage = false);
     }
+  }
+
+  // ============ STATUS CARD (Location + Contacts) ============
+  Widget _buildStatusCard(dynamic emergency) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppColors.radiusLarge),
+        boxShadow: AppColors.softShadow,
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  color: AppColors.danger,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Location Sharing: LIVE',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const Spacer(),
+              if (_isSendingSms)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.location_on, size: 16, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _locationUpdate,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMedium,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(
+                Icons.people_alt_rounded,
+                size: 16,
+                color: AppColors.secondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Alert sent to ${emergency.notifiedContacts.length} contacts',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textMedium,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // ============ STOP EMERGENCY ============

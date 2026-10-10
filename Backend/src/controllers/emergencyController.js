@@ -8,6 +8,25 @@ const fs = require('fs');
 const multer = require('multer');
 
 
+// ✅ Multer config for auto-captured images
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/images');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const emergencyId = req.params.id;
+    const camera = req.body.camera || 'unknown';
+    const idx = req.body.captureIndex || '0';
+    cb(null, `emergency_${emergencyId}_${camera}_${idx}_${Date.now()}.jpg`);
+  },
+});
+
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per photo
+});
 
 // ✅ Configure multer for audio uploads
 const storage = multer.diskStorage({
@@ -29,6 +48,68 @@ const uploadAudio = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max per chunk
 });
 
+
+// ============ ✅ UPLOAD AUTO-CAPTURED IMAGE ============
+// @desc    App uploads a photo taken during emergency
+// @route   POST /api/emergency/:id/auto-image
+// @access  Private
+exports.uploadEmergencyImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image uploaded',
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      _id: id,
+      userId: req.user.id,
+      status: 'active',
+    });
+
+    if (!emergency) {
+      // Clean up uploaded file
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        success: false,
+        message: 'Active emergency not found',
+      });
+    }
+
+    const fileName = req.file.filename;
+    const publicUrl = `${process.env.FRONTEND_URL || 'http://10.112.210.187:5000'}/uploads/images/${fileName}`;
+
+    const image = {
+      url: publicUrl,
+      capturedAt: req.body.capturedAt ? new Date(req.body.capturedAt) : new Date(),
+      camera: req.body.camera || 'unknown',
+      captureIndex: parseInt(req.body.captureIndex) || 0,
+      sizeBytes: req.file.size,
+    };
+
+    emergency.cameraImages.push(image);
+    await emergency.save();
+
+    console.log(`📸 Auto-capture uploaded: ${fileName} (${req.file.size} bytes, ${image.camera})`);
+
+    res.status(200).json({
+      success: true,
+      image: image,
+    });
+  } catch (error) {
+    console.error('Upload auto-image error:', error);
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 // ============ ✅ UPLOAD AUDIO CHUNK ============

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../services/camera_capture_service.dart';
 import '../providers/emergency_provider.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
@@ -187,7 +188,6 @@ class _EmergencyMonitoringScreenState extends State<EmergencyMonitoringScreen> {
                                 fontSize: 13,
                               ),
                             ),
-                            
                           ),
                         ),
                       ],

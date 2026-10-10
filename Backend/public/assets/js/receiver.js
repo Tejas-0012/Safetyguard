@@ -333,7 +333,24 @@ function updateImages() {
 
     if (imageCount > 0 && container && grid) {
         container.style.display = 'block';
-        grid.innerHTML = imgs.map(img => `<img src="${img.url}" />`).join('');
+        grid.innerHTML = imgs
+            .slice()  // copy array
+            .reverse()  // newest first
+            .map((img) => {
+                const label = img.camera === 'front' ? '🤳 Front' : '📷 Back';
+                const time = img.capturedAt
+                    ? new Date(img.capturedAt).toLocaleTimeString()
+                    : '';
+                return `
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        <img src="${img.url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px;border:1px solid #eee;">
+                        <div style="font-size:11px;color:#666;text-align:center;">
+                            ${label} • ${time}
+                        </div>
+                    </div>
+                `;
+            })
+            .join('');
     }
 }
 

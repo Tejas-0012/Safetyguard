@@ -1,3 +1,4 @@
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -41,6 +42,13 @@ const MethodChannel _nativeChannel = MethodChannel(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // ✅ Request mic permission once at startup
+  // This avoids the telephony plugin crash later during SOS
+  try {
+    await Permission.microphone.request();
+  } catch (e) {
+    print('⚠️ Mic permission request failed: $e');
+  }
 
   // Initialize Firebase
   try {

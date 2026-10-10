@@ -39,12 +39,12 @@ class AudioRecordingService {
     if (_isRecording) return true;
 
     // Check mic permission
-    final micStatus = await Permission.microphone.request();
+    // ✅ Just CHECK permission (already granted at startup)
+    final micStatus = await Permission.microphone.status;
     if (!micStatus.isGranted) {
-      print('❌ Microphone permission denied');
+      print('❌ Microphone permission not granted');
       return false;
     }
-
     _emergencyId = emergencyId;
     _chunkIndex = 0;
     _isRecording = true;
