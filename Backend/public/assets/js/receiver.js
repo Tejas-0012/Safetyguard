@@ -127,11 +127,12 @@ function renderUI() {
 
     // Images
     updateImages();
+        // Audio
+updateAudio();
 
     // Replies
     updateReplies();
-    // Audio
-updateAudio();
+
 
     // Status
     const statusValue = document.getElementById('statusValue');

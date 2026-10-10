@@ -474,6 +474,7 @@ exports.getReceiverByToken = async (req, res) => {
         cameraImages: emergency.cameraImages,
         isVideoActive: emergency.isVideoActive,
         receiverReplies: emergency.receiverReplies || [],
+        audioRecordings: emergency.audioRecordings || [],
         // ✅ Show all receivers' locations to the receiver too (optional)
         otherReceivers: emergency.receiverLinks
           .filter((l) => l.token !== token)
@@ -841,6 +842,7 @@ exports.getEmergencyByToken = async (req, res) => {
         locationPoints: emergency.locationPoints.slice(-30),
         cameraImages: emergency.cameraImages,
         isVideoActive: emergency.isVideoActive,
+        audioRecordings: emergency.audioRecordings || [],
         receiverReplies: emergency.receiverReplies || []
       }
     });
