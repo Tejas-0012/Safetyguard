@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
+import '../services/audio_recording_service.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
@@ -31,6 +33,8 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   bool _isCapturingImage = false;
   bool _isSendingSms = false;
   BitmapDescriptor? _personIcon;
+  final AudioRecordingService _audioService = AudioRecordingService();
+  bool _isRecordingAudio = false;
 
   LocationProvider? _locationProvider;
   EmergencyProvider? _emergencyProvider;
@@ -46,6 +50,42 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       if (!mounted) return;
       _refreshReceiverLocations();
     });
+
+    // ✅ Start audio recording after slight delay (wait for emergency to load)
+    Future.delayed(const Duration(seconds: 2), () {
+      _startAudioRecording();
+    });
+  }
+
+  Future<void> _startAudioRecording() async {
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final emergencyId = provider.currentEmergency?.id;
+    final token = await _getAuthToken();
+
+    if (emergencyId == null || token == null) {
+      print('❌ Cannot start audio: missing emergencyId or token');
+      return;
+    }
+
+    final started = await _audioService.startRecording(
+      emergencyId: emergencyId,
+      authToken: token,
+    );
+
+    if (mounted) {
+      setState(() => _isRecordingAudio = started);
+    }
+  }
+
+  Future<String?> _getAuthToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('token');
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> _loadPersonIcon() async {
@@ -240,7 +280,19 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
+    _stopAudioAndDispose();
     super.dispose();
+  }
+
+  Future<void> _stopAudioAndDispose() async {
+    try {
+      final token = await _getAuthToken();
+      if (token != null && _isRecordingAudio) {
+        await _audioService.stopRecording(authToken: token);
+      }
+    } catch (e) {
+      print('❌ Error stopping audio: $e');
+    }
   }
 
   void _updateLocation(double lat, double lng) {
@@ -507,6 +559,41 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                           ),
                         ),
                       ),
+                      if (_isRecordingAudio) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Text(
+                                'REC',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],

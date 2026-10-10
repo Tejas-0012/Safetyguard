@@ -1,5 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
 const { protect } = require('../middleware/auth');
 const {
   startEmergency,
@@ -18,8 +22,31 @@ const {
   updateReceiverLocation,
   stopReceiverSharing,
   replyFromReceiver,
-  getReplies,  // ✅ ADD THIS IMPORT
+  getReplies,
+  uploadAudioChunk,
 } = require('../controllers/emergencyController');
+
+// ============ MULTER CONFIG FOR AUDIO UPLOADS ============
+const audioStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/audio');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const emergencyId = req.params.id;
+    const chunkIndex = req.body.chunkIndex || '0';
+    cb(
+      null,
+      `emergency_${emergencyId}_chunk_${chunkIndex}_${Date.now()}.m4a`
+    );
+  },
+});
+
+const audioUpload = multer({
+  storage: audioStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+});
 
 // ============ PUBLIC ROUTES (no auth) ============
 router.get('/receiver/:token', getReceiverByToken);
@@ -37,12 +64,13 @@ router.post('/start', protect, startEmergency);
 
 // ============ /:id SUB-ROUTES (must come BEFORE generic /:id) ============
 router.post('/:id/location', protect, updateLocation);
+router.post('/:id/audio', protect, audioUpload.single('audio'), uploadAudioChunk);
 router.post('/:id/stop', protect, stopEmergency);
 router.post('/:id/image', protect, addImage);
 router.post('/:id/reply', protect, replyToEmergency);
 router.post('/:id/web-stream', protect, generateWebStream);
 router.get('/:id/details', protect, getEmergencyDetails);
-router.get('/:id/replies', protect, getReplies);   // ✅ ADD THIS ROUTE
+router.get('/:id/replies', protect, getReplies);
 
 // ============ GENERIC ROUTE (must be LAST) ============
 router.get('/:id', protect, getEmergencyStatus);

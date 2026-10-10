@@ -3,6 +3,97 @@ const User = require('../models/User');
 const Contact = require('../models/Contact');
 const { messaging } = require('../config/firebase');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+
+
+
+// ✅ Configure multer for audio uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/audio');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const emergencyId = req.params.id;
+    const chunkIndex = req.body.chunkIndex || '0';
+    const timestamp = Date.now();
+    cb(null, `emergency_${emergencyId}_chunk_${chunkIndex}_${timestamp}.m4a`);
+  },
+});
+
+const uploadAudio = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max per chunk
+});
+
+
+
+// ============ ✅ UPLOAD AUDIO CHUNK ============
+// @desc    Receiver app uploads an audio chunk
+// @route   POST /api/emergency/:id/audio
+// @access  Private
+exports.uploadAudioChunk = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No audio file uploaded',
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      _id: id,
+      userId: req.user.id,
+      status: 'active',
+    });
+
+    if (!emergency) {
+      // Delete the file we just saved
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        success: false,
+        message: 'Active emergency not found',
+      });
+    }
+
+    // Build public URL
+    const fileName = req.file.filename;
+    const publicUrl = `${process.env.FRONTEND_URL || 'http://10.112.210.187:5000'}/uploads/audio/${fileName}`;
+
+    const chunk = {
+      url: publicUrl,
+      chunkIndex: parseInt(req.body.chunkIndex) || 0,
+      durationSeconds: parseInt(req.body.durationSeconds) || 30,
+      recordedAt: req.body.recordedAt ? new Date(req.body.recordedAt) : new Date(),
+      sizeBytes: req.file.size,
+    };
+
+    emergency.audioRecordings.push(chunk);
+    await emergency.save();
+
+    console.log(`🎙️ Audio chunk uploaded: ${fileName} (${req.file.size} bytes)`);
+
+    res.status(200).json({
+      success: true,
+      audio: chunk,
+    });
+  } catch (error) {
+    console.error('Upload audio error:', error);
+    // Clean up uploaded file on error
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ============ START EMERGENCY ============
 // @desc    Start emergency

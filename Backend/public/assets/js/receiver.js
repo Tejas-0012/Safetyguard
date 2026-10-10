@@ -130,6 +130,8 @@ function renderUI() {
 
     // Replies
     updateReplies();
+    // Audio
+updateAudio();
 
     // Status
     const statusValue = document.getElementById('statusValue');
@@ -211,6 +213,39 @@ function updateMap() {
                 });
             }
         });
+    }
+}
+
+// ============================================
+// Audio Recordings
+// ============================================
+
+let lastAudioCount = 0;
+
+function updateAudio() {
+    const audios = emergency.audioRecordings || [];
+    const audioCount = audios.length;
+
+    if (audioCount === lastAudioCount) return;
+    lastAudioCount = audioCount;
+
+    const container = document.getElementById('audioContainer');
+    const list = document.getElementById('audioList');
+
+    if (audioCount > 0 && container && list) {
+        container.style.display = 'block';
+        list.innerHTML = audios.map((audio, index) => `
+            <div class="audio-chunk">
+                <div class="audio-chunk-header">
+                    <span>🎵 Chunk ${audio.chunkIndex ?? index + 1}</span>
+                    <span>${audio.durationSeconds ?? 30}s</span>
+                </div>
+                <audio controls preload="none">
+                    <source src="${audio.url}" type="audio/mp4">
+                    Your browser does not support audio playback.
+                </audio>
+            </div>
+        `).join('');
     }
 }
 

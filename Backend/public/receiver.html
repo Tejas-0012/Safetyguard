@@ -402,6 +402,29 @@
             font-size: 15px;
         }
 
+        .audio-chunk {
+    padding: 12px 14px;
+    background: #f3f5f7;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.audio-chunk-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #555;
+    font-weight: 600;
+}
+
+.audio-chunk audio {
+    width: 100%;
+    height: 32px;
+}
+
         /* =========================
            SMALL MOBILE
         ========================= */
@@ -595,7 +618,17 @@
 
             </div>
 
-
+<!-- ✅ AUDIO RECORDINGS -->
+<div
+    class="images-container"
+    id="audioContainer"
+    style="display: none;"
+>
+    <h3 style="font-size:18px;margin-bottom:14px;">
+        🎙️ Emergency Audio Recordings
+    </h3>
+    <div id="audioList"></div>
+</div>
             <!-- EMERGENCY IMAGES -->
             <div
                 class="images-container"

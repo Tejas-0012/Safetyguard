@@ -1,7 +1,33 @@
 const mongoose = require('mongoose');
 
 // ============ SUB-SCHEMAS ============
-
+// ✅ Sub-schema for audio recordings
+const AudioRecordingSchema = new mongoose.Schema({
+  url: {
+    type: String,
+    required: true,
+  },
+  chunkIndex: {
+    type: Number,
+    default: 0,
+  },
+  durationSeconds: {
+    type: Number,
+    default: 30,
+  },
+  recordedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  uploadedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  sizeBytes: {
+    type: Number,
+    default: 0,
+  },
+});
 // Sub-schema for location points
 const LocationPointSchema = new mongoose.Schema({
   latitude: {
@@ -121,6 +147,7 @@ const EmergencySchema = new mongoose.Schema(
       { type: mongoose.Schema.Types.ObjectId, ref: 'Contact' },
     ],
     cameraImages: [EmergencyImageSchema],
+    audioRecordings: [AudioRecordingSchema],
     isVideoActive: { type: Boolean, default: false },
     receiverReplies: [ReceiverReplySchema],
     isWebStreamActive: { type: Boolean, default: false },

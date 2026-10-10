@@ -54,6 +54,8 @@ dependencies:
   another_telephony: ^0.4.1
   sensors_plus: ^6.0.0             # Accelerometer
   flutter_foreground_task: ^8.0.0
+  record: ^7.1.2
+  path_provider: ^2.1.6
   
 
 dev_dependencies:
