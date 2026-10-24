@@ -149,10 +149,19 @@ updateAudio();
     // Status
     const statusValue = document.getElementById('statusValue');
     const statusBadge = document.getElementById('statusBadge');
+    const triggerLabels = {
+        'button': '👆 App Button',
+        'shake': '📳 Shake',
+        'voice': '🎤 Voice',
+        'tile': '⚙️ Quick Tile',
+        'widget': '📱 Home Widget'
+    };
+    const triggerText = triggerLabels[emergency.triggerSource] || 'Manual';
     if (emergency.status === 'active') {
         if (statusValue) {
-            statusValue.textContent = '🔴 Active';
-            statusValue.style.color = '#ff1744';
+            statusValue.textContent = triggerText;
+            statusValue.textContent = '#ff1744';
+            statusValue.style.fontSize = '16px';
         }
         if (statusBadge) statusBadge.textContent = '● ACTIVE';
     } else {
