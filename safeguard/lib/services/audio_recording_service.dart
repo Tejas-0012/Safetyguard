@@ -173,8 +173,7 @@ class AudioRecordingService {
         ),
         'chunkIndex': _chunkIndex.toString(),
         'durationSeconds': durationSeconds.toString(),
-        'recordedAt':
-            _chunkStart?.toIso8601String() ?? DateTime.now().toIso8601String(),
+        'recordedAt': (_chunkStart ?? DateTime.now()).toUtc().toIso8601String(),
       });
 
       final response = await _dio.post(

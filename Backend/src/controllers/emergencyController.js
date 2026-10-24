@@ -182,7 +182,7 @@ exports.uploadAudioChunk = async (req, res) => {
 // @access  Private
 exports.startEmergency = async (req, res) => {
   try {
-    const { latitude, longitude } = req.body;
+    const { latitude, longitude, triggerSource } = req.body;
 
     if (latitude === undefined || longitude === undefined) {
       return res.status(400).json({
@@ -208,6 +208,7 @@ exports.startEmergency = async (req, res) => {
       userId: req.user.id,
       currentLocation: { latitude, longitude },
       locationPoints: [{ latitude, longitude }],
+      triggerSource: triggerSource || 'button',
       status: 'active'
     });
 
@@ -270,6 +271,7 @@ res.status(201).json({
     startTime: emergency.startTime,
     currentLocation: emergency.currentLocation,
     notifiedContacts: notifiedContacts,
+    triggerSource: emergency.triggerSource,
   },
   receiverLinks: receiverLinks.map((link) => ({
     contactId: link.contactId,

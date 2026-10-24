@@ -152,6 +152,11 @@ const EmergencySchema = new mongoose.Schema(
       enum: ['active', 'resolved', 'cancelled'],
       default: 'active',
     },
+        triggerSource: {
+      type: String,
+      enum: ['button', 'shake', 'voice', 'tile', 'widget'],
+      default: 'button',
+    },
     locationPoints: [LocationPointSchema],
     currentLocation: {
       latitude: { type: Number, default: 0 },

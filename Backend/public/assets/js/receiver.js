@@ -355,13 +355,14 @@ function updateImages() {
                         ? '📷 Back'
                         : '📷 Photo';
                 
-                const time = new Date(img.capturedAt).toLocaleTimeString('en-IN', {
-                    timeZone: 'Asia/Kolkata',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true,
-                });
+                const d = new Date(img.capturedAt);
+const time = d.toLocaleTimeString('en-IN', {
+    timeZone: 'UTC',    // ← read the digits without adding +5:30
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+});
 
                 return `
                     <div style="display:flex;flex-direction:column;gap:4px;">
@@ -375,6 +376,7 @@ function updateImages() {
             .join('');
     }
 }
+
 
 
 // ============================================

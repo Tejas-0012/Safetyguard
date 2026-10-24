@@ -19,6 +19,8 @@
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /> 
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
       <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <application
@@ -69,10 +71,10 @@
 <service
     android:name=".ShakeDetectionService"
     android:exported="false"
-    android:foregroundServiceType="specialUse">
+    android:foregroundServiceType="specialUse|camera|microphone">
     <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="Personal safety monitoring - shake detection for SOS alerts" />
+        android:value="Personal safety monitoring - shake detection and emergency media capture" />
 </service>
 
         <!-- ✅ SafeGuard Quick Settings Tile -->

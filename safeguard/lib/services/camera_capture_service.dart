@@ -203,7 +203,7 @@ class CameraCaptureService {
         ),
         'camera': camera,
         'captureIndex': index.toString(),
-        'capturedAt': DateTime.now().toIso8601String(),
+        'capturedAt': DateTime.now().toUtc().toIso8601String(),
       });
 
       final response = await _dio.post(

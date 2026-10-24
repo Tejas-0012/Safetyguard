@@ -1,10 +1,9 @@
 package com.example.safeguard
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.drawable.Icon
-import android.net.Uri
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
@@ -16,7 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -35,6 +33,8 @@ class SafeGuardTileService : TileService() {
         private const val KEY_LAST_LAT = "flutter.safeguard_last_lat"
         private const val KEY_LAST_LNG = "flutter.safeguard_last_lng"
         private const val KEY_API_BASE = "flutter.safeguard_api_base_url"
+        private const val KEY_EMERGENCY_ID = "flutter.safeguard_emergency_id"
+        private const val KEY_EMERGENCY_ACTIVE = "flutter.safeguard_emergency_active"
     }
 
     override fun onStartListening() {
@@ -72,7 +72,7 @@ class SafeGuardTileService : TileService() {
         val token = prefs.getString(KEY_TOKEN, null)
 
         if (token.isNullOrEmpty()) {
-            Log.w(TAG, "No auth token — cannot trigger SOS")
+            Log.w(TAG, "No auth token — opening app")
             openApp()
             return
         }
@@ -101,15 +101,11 @@ class SafeGuardTileService : TileService() {
     }
 
     private suspend fun triggerSos(prefs: SharedPreferences, token: String) {
-        // 1. Get last known location
-// ✅ NEW — reads as String, parses to Double
-val latStr = prefs.getString(KEY_LAST_LAT, null)
-val lngStr = prefs.getString(KEY_LAST_LNG, null)
+        val lat = extractDouble(prefs.getString(KEY_LAST_LAT, null))
+            ?.takeIf { it != 0.0 }
+        val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
+            ?.takeIf { it != 0.0 }
 
-val lat = extractDouble(prefs.getString(KEY_LAST_LAT, null))
-    ?.takeIf { it != 0.0 }
-val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
-    ?.takeIf { it != 0.0 }
         if (lat == null || lng == null) {
             Log.w(TAG, "No last known location — opening app")
             openApp()
@@ -121,21 +117,24 @@ val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
 
         Log.d(TAG, "Starting emergency at $lat,$lng via $apiBase")
 
-        // 2. POST /api/emergency/start
-        val emergencyId = startEmergencyApi(apiBase, token, lat, lng)
+        val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng)
         if (emergencyId == null) {
             Log.e(TAG, "Failed to create emergency")
             return
         }
 
-        // 3. POST /api/emergency/:id/web-stream
-        val webUrl = generateWebStreamApi(apiBase, token, emergencyId)
+        val userName = prefs.getString(KEY_USER_NAME, "User") ?: "User"
+        val sentCount = sendPersonalizedSms(links, userName)
+        Log.d(TAG, "SOS triggered. Sent $sentCount/${links.size} SMS")
 
-        // 4. Send SMS via Android SmsManager
-        sendSmsToContacts(prefs, token, apiBase, lat, lng, emergencyId, webUrl)
+        // Persist emergency id + start background capture (app does NOT open)
+        prefs.edit()
+            .putString(KEY_EMERGENCY_ID, emergencyId)
+            .putBoolean(KEY_EMERGENCY_ACTIVE, true)
+            .apply()
 
-        // 5. Open app so user sees Emergency Mode
-        openApp()
+        ShakeDetectionService.startEmergencyMode(this)
+        Log.d(TAG, "🚨 Background capture started")
     }
 
     // ============ API CALLS ============
@@ -145,7 +144,7 @@ val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
         token: String,
         lat: Double,
         lng: Double,
-    ): String? {
+    ): Pair<String?, List<ReceiverLink>> {
         return try {
             val url = URL("$apiBase/emergency/start")
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -161,7 +160,6 @@ val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
                 put("latitude", lat)
                 put("longitude", lng)
             }
-
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
 
             val code = conn.responseCode
@@ -171,124 +169,72 @@ val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
                 conn.errorStream?.bufferedReader()?.readText() ?: ""
             }
 
-            Log.d(TAG, "startEmergency response [$code]: $respText")
+            Log.d(TAG, "startEmergency [$code]: $respText")
 
             if (code in 200..299) {
                 val json = JSONObject(respText)
                 val emergency = json.optJSONObject("emergency")
-                emergency?.optString("id")?.takeIf { it.isNotEmpty() }
+                val emergencyId = emergency?.optString("id")?.takeIf { it.isNotEmpty() }
                     ?: emergency?.optString("_id")?.takeIf { it.isNotEmpty() }
+
+                val links = mutableListOf<ReceiverLink>()
+                val linksArray = json.optJSONArray("receiverLinks")
+                if (linksArray != null) {
+                    for (i in 0 until linksArray.length()) {
+                        val obj = linksArray.getJSONObject(i)
+                        links.add(
+                            ReceiverLink(
+                                contactName = obj.optString("contactName", ""),
+                                contactPhone = obj.optString("contactPhone", ""),
+                                webUrl = obj.optString("webUrl", ""),
+                                token = obj.optString("token", ""),
+                            )
+                        )
+                    }
+                }
+                Pair(emergencyId, links)
             } else {
-                null
+                Pair(null, emptyList())
             }
         } catch (e: Exception) {
             Log.e(TAG, "startEmergencyApi failed", e)
-            null
+            Pair(null, emptyList())
         }
     }
 
-    private fun generateWebStreamApi(
-        apiBase: String,
-        token: String,
-        emergencyId: String,
-    ): String {
-        return try {
-            val url = URL("$apiBase/emergency/$emergencyId/web-stream")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Authorization", "Bearer $token")
-                doOutput = true
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
+    private fun sendPersonalizedSms(
+        links: List<ReceiverLink>,
+        userName: String,
+    ): Int {
+        if (links.isEmpty()) return 0
 
-            val code = conn.responseCode
-            val respText = if (code in 200..299) {
-                conn.inputStream.bufferedReader().readText()
-            } else {
-                ""
-            }
-
-            Log.d(TAG, "webStream response [$code]: $respText")
-
-            if (code in 200..299) {
-                JSONObject(respText).optString("webUrl", "")
-            } else {
-                ""
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "generateWebStreamApi failed", e)
-            ""
+        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(SmsManager::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            SmsManager.getDefault()
         }
-    }
 
-    // ============ SMS ============
-
-    private fun sendSmsToContacts(
-        prefs: SharedPreferences,
-        token: String,
-        apiBase: String,
-        lat: Double,
-        lng: Double,
-        emergencyId: String,
-        webUrl: String,
-    ) {
-        try {
-            // Fetch contacts from backend
-            val url = URL("$apiBase/contacts")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                setRequestProperty("Authorization", "Bearer $token")
-                connectTimeout = 15000
-                readTimeout = 15000
+        var sentCount = 0
+        for (link in links) {
+            if (link.contactPhone.isEmpty()) continue
+            val message = "Hi ${link.contactName}, $userName has activated an SOS alert! " +
+                    "Please help. Track live: ${link.webUrl}"
+            try {
+                smsManager.sendTextMessage(
+                    normalizePhone(link.contactPhone),
+                    null,
+                    message,
+                    null,
+                    null,
+                )
+                sentCount++
+                Log.d(TAG, "✅ SMS sent to ${link.contactName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ SMS failed to ${link.contactName}", e)
             }
-
-            val code = conn.responseCode
-            if (code !in 200..299) {
-                Log.e(TAG, "Failed to fetch contacts [$code]")
-                return
-            }
-
-            val respText = conn.inputStream.bufferedReader().readText()
-            val json = JSONObject(respText)
-            val contacts: JSONArray = json.optJSONArray("contacts") ?: return
-
-            val userName = prefs.getString(KEY_USER_NAME, "User") ?: "User"
-
-            val message = if (webUrl.isNotEmpty()) {
-                "EMERGENCY! $userName needs help. Track live: $webUrl"
-            } else {
-                "EMERGENCY! $userName needs help. Location: https://maps.google.com/?q=$lat,$lng"
-            }
-
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
-
-            for (i in 0 until contacts.length()) {
-                val contact = contacts.getJSONObject(i)
-                val phone = contact.optString("phone", "")
-                if (phone.isNotEmpty()) {
-                    try {
-                        smsManager.sendTextMessage(
-                            normalizePhone(phone),
-                            null,
-                            message,
-                            null,
-                            null,
-                        )
-                        Log.d(TAG, "SMS sent to $phone")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to send SMS to $phone", e)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "sendSmsToContacts failed", e)
         }
+        return sentCount
     }
 
     private fun normalizePhone(phone: String): String {
@@ -297,33 +243,24 @@ val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
         return if (!cleaned.startsWith("91")) "+91$cleaned" else "+$cleaned"
     }
 
-/**
- * Flutter's shared_preferences may store doubles with a base64 prefix.
- * Extract the trailing numeric value safely.
- */
-private fun extractDouble(raw: String?): Double? {
-    if (raw.isNullOrEmpty()) return null
-    raw.toDoubleOrNull()?.let { return it }
-    val matches = Regex("""-?\d+\.?\d*""").findAll(raw).toList()
-    return matches.lastOrNull()?.value?.toDoubleOrNull()
-}
-
-    // ============ OPEN APP ============
+    private fun extractDouble(raw: String?): Double? {
+        if (raw.isNullOrEmpty()) return null
+        raw.toDoubleOrNull()?.let { return it }
+        val matches = Regex("""-?\d+\.?\d*""").findAll(raw).toList()
+        return matches.lastOrNull()?.value?.toDoubleOrNull()
+    }
 
     private fun openApp() {
         try {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
             intent?.apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("from_tile", true)
             }
             if (intent != null) {
                 startActivityAndCollapse(
                     PendingIntent.getActivity(
-                        this,
-                        0,
-                        intent,
+                        this, 0, intent,
                         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                     ),
                 )
@@ -332,8 +269,6 @@ private fun extractDouble(raw: String?): Double? {
             Log.e(TAG, "Failed to open app", e)
         }
     }
-
-    // ============ HELPER ============
 
     private suspend fun withContextMain(block: () -> Unit) {
         android.os.Handler(mainLooper).post(block)

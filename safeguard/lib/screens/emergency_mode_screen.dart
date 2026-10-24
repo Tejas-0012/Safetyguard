@@ -13,6 +13,7 @@ import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../services/audio_recording_service.dart';
 import '../services/camera_capture_service.dart';
+import '../services/foreground_service.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
@@ -45,6 +46,8 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   @override
   void initState() {
     super.initState();
+    ForegroundService.startEmergency();
+
     _loadPersonIcon();
     _setupEmergencyTracking();
 
@@ -468,6 +471,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     _locationProvider?.removeListener(_onLocationChanged);
     _stopAudioAndDispose();
     _cameraService.stop();
+    ForegroundService.stopEmergency();
     super.dispose();
   }
 

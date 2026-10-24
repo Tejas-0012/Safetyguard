@@ -40,19 +40,26 @@ class MainActivity : FlutterActivity() {
                 fromTile = false
                 result.success(true)
             }
-            // ✅ Shake detection
             "startShakeDetection" -> {
-                ShakeDetectionService.start(this)
+                ShakeDetectionService.startShakeDetection(this)
                 result.success(true)
             }
             "stopShakeDetection" -> {
-                ShakeDetectionService.stop(this)
+                ShakeDetectionService.stopShakeDetection(this)
                 result.success(true)
             }
             "isShakeDetectionRunning" -> {
                 val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                val enabled = prefs.getBoolean("flutter.safeguard_shake_enabled", false)
-                result.success(enabled)
+                result.success(prefs.getBoolean("flutter.safeguard_shake_enabled", false))
+            }
+            // ✅ NEW: Emergency foreground
+            "startEmergencyForeground" -> {
+                ShakeDetectionService.startEmergencyMode(this)
+                result.success(true)
+            }
+            "stopEmergencyForeground" -> {
+                ShakeDetectionService.stopEmergencyMode(this)
+                result.success(true)
             }
             else -> result.notImplemented()
         }

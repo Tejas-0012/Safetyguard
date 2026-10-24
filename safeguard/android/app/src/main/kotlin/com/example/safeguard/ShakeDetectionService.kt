@@ -1,10 +1,11 @@
 package com.example.safeguard
-
+import com.rementia.openwakeword.lib.WakeWordEngine
+import com.rementia.openwakeword.lib.model.WakeWordModel
+import com.rementia.openwakeword.lib.model.DetectionMode
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -17,46 +18,58 @@ import android.os.IBinder
 import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.LifecycleService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.sqrt
 
-class ShakeDetectionService : Service(), SensorEventListener {
+data class ReceiverLink(
+    val contactName: String,
+    val contactPhone: String,
+    val webUrl: String,
+    val token: String,
+)
+
+class ShakeDetectionService : LifecycleService(), SensorEventListener {
 
     companion object {
         private const val TAG = "ShakeService"
         private const val CHANNEL_ID = "safeguard_monitoring"
         private const val NOTIFICATION_ID = 9001
 
-        const val ACTION_START = "com.example.safeguard.SHAKE_START"
-        const val ACTION_STOP = "com.example.safeguard.SHAKE_STOP"
+        private var audioRecorder: AudioRecorder? = null
+        private var cameraCapture: CameraCapture? = null
 
-        // Shake detection tuning
-        private const val SHAKE_THRESHOLD_G = 2.5f      // Accel force threshold
-        private const val SHAKE_COUNT_REQUIRED = 3       // Number of shakes
-        private const val SHAKE_WINDOW_MS = 2000L        // 3 shakes within 2s
-        private const val MIN_INTERVAL_MS = 200L         // Min time between shakes
-        private const val COOLDOWN_MS = 30000L           // 30s cooldown after trigger
+        const val ACTION_START_SHAKE = "com.example.safeguard.SHAKE_START"
+        const val ACTION_STOP_SHAKE = "com.example.safeguard.SHAKE_STOP"
+        const val ACTION_START_EMERGENCY = "com.example.safeguard.EMERGENCY_START"
+        const val ACTION_STOP_EMERGENCY = "com.example.safeguard.EMERGENCY_STOP"
 
-        // Same SharedPreferences keys as tile/widget
+        private const val SHAKE_THRESHOLD_G = 2.5f
+        private const val SHAKE_COUNT_REQUIRED = 3
+        private const val SHAKE_WINDOW_MS = 2000L
+        private const val MIN_INTERVAL_MS = 200L
+        private const val COOLDOWN_MS = 30000L
+
         private const val PREFS_NAME = "FlutterSharedPreferences"
         private const val KEY_TOKEN = "flutter.safeguard_auth_token"
         private const val KEY_USER_NAME = "flutter.safeguard_user_name"
         private const val KEY_LAST_LAT = "flutter.safeguard_last_lat"
         private const val KEY_LAST_LNG = "flutter.safeguard_last_lng"
         private const val KEY_API_BASE = "flutter.safeguard_api_base_url"
+        private const val KEY_EMERGENCY_ACTIVE = "flutter.safeguard_emergency_active"
+        private const val KEY_EMERGENCY_ID = "flutter.safeguard_emergency_id"
 
-        fun start(context: Context) {
+        fun startShakeDetection(context: Context) {
             val intent = Intent(context, ShakeDetectionService::class.java).apply {
-                action = ACTION_START
+                action = ACTION_START_SHAKE
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -65,9 +78,27 @@ class ShakeDetectionService : Service(), SensorEventListener {
             }
         }
 
-        fun stop(context: Context) {
+        fun stopShakeDetection(context: Context) {
             val intent = Intent(context, ShakeDetectionService::class.java).apply {
-                action = ACTION_STOP
+                action = ACTION_STOP_SHAKE
+            }
+            context.startService(intent)
+        }
+
+        fun startEmergencyMode(context: Context) {
+            val intent = Intent(context, ShakeDetectionService::class.java).apply {
+                action = ACTION_START_EMERGENCY
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stopEmergencyMode(context: Context) {
+            val intent = Intent(context, ShakeDetectionService::class.java).apply {
+                action = ACTION_STOP_EMERGENCY
             }
             context.startService(intent)
         }
@@ -75,13 +106,14 @@ class ShakeDetectionService : Service(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
-    private var isRunning = false
 
-    // Shake detection state
+    private var isServiceRunning = false
+    private var isShakeEnabled = false
+    private var isEmergencyActive = false
+
     private var shakeCount = 0
     private var firstShakeTime = 0L
     private var lastShakeTime = 0L
-    private var lastTriggerTime = 0L
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -92,72 +124,213 @@ class ShakeDetectionService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+
         when (intent?.action) {
-            ACTION_START -> startMonitoring()
-            ACTION_STOP -> stopMonitoring()
+            ACTION_START_SHAKE -> {
+                enableShakeDetection()
+                startVoiceDetection()
+                ensureForegroundService()
+                
+            }
+            ACTION_STOP_SHAKE -> {
+                disableShakeDetection()
+                stopVoiceDetection()
+                if (!isEmergencyActive) stopEverything()
+            }
+            ACTION_START_EMERGENCY -> {
+                isEmergencyActive = true
+                persistEmergencyFlag(true)
+                ensureForegroundService()
+                updateNotification()
+                startEvidenceCapture()
+            }
+            ACTION_STOP_EMERGENCY -> {
+                isEmergencyActive = false
+                persistEmergencyFlag(false)
+                stopEvidenceCapture()
+                if (!isShakeEnabled) {
+                    stopEverything()
+                } else {
+                    updateNotification()
+                }
+            }
         }
         return START_STICKY
     }
 
-    private fun startMonitoring() {
-        if (isRunning) return
-        isRunning = true
+private var wakeWordEngine: WakeWordEngine? = null
+private var voiceJob: kotlinx.coroutines.Job? = null
+@Volatile private var lastTriggerTime = 0L
 
-        // Start foreground with notification
-       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-    startForeground(
-        NOTIFICATION_ID,
-        buildNotification(),
-        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-    )
-} else {
-    startForeground(NOTIFICATION_ID, buildNotification())
+private fun startVoiceDetection() {
+    if (wakeWordEngine != null) return
+    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        Log.w(TAG, "No RECORD_AUDIO, skipping voice detection")
+        return
+    }
+    try {
+        val model = WakeWordModel("code_red", "code_red.onnx", 0.7f)
+        val engine = WakeWordEngine(
+            applicationContext,
+            listOf(model),
+            DetectionMode.SINGLE_BEST
+        )
+        wakeWordEngine = engine
+        engine.start()
+
+        voiceJob = scope.launch {
+            engine.detections.collect { d ->
+                val now = System.currentTimeMillis()
+                if (isEmergencyActive || now - lastTriggerTime < COOLDOWN_MS) return@collect
+                lastTriggerTime = now
+                Log.d(TAG, "Wake word 'code red' (score=${d.score})")
+                triggerSosFromShake()
+            }
+        }
+        Log.d(TAG, "Voice detection started")
+    } catch (e: Exception) {
+        Log.e(TAG, "Voice detection failed to start", e)
+        wakeWordEngine = null
+    }
 }
 
-        // Register accelerometer
-        accelerometer?.let {
-            sensorManager.registerListener(
-                this,
-                it,
-                SensorManager.SENSOR_DELAY_GAME,
-            )
-            Log.d(TAG, "✅ Shake detection started")
-        } ?: Log.e(TAG, "❌ No accelerometer available")
+private fun stopVoiceDetection() {
+    voiceJob?.cancel(); voiceJob = null
+    try {
+        wakeWordEngine?.stop()
+        wakeWordEngine?.release()
+    } catch (e: Exception) {
+        Log.e(TAG, "Wake word stop error", e)
+    }
+    wakeWordEngine = null
+}
 
-        // Persist flag
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean("flutter.safeguard_shake_enabled", true).apply()
+    // ============ EVIDENCE CAPTURE ============
+
+    private fun startEvidenceCapture() {
+        try {
+            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val token = prefs.getString(KEY_TOKEN, null)
+            val apiBase = prefs.getString(KEY_API_BASE, null)
+                ?: "https://safetyguard-fcn6.onrender.com/api"
+
+            if (token.isNullOrEmpty()) {
+                Log.w(TAG, "Cannot start evidence: no token")
+                return
+            }
+
+            val emergencyId = prefs.getString(KEY_EMERGENCY_ID, null)
+            if (emergencyId.isNullOrEmpty()) {
+                Log.w(TAG, "Cannot start evidence: no emergency ID")
+                return
+            }
+
+            if (audioRecorder == null) {
+                audioRecorder = AudioRecorder(applicationContext, apiBase, token, emergencyId).also {
+                    it.start()
+                    Log.d(TAG, "🎙️ Native audio recorder started")
+                }
+            }
+
+            if (cameraCapture == null) {
+                cameraCapture = CameraCapture(this, apiBase, token, emergencyId).also {
+                    it.start()
+                    Log.d(TAG, "📸 Native camera capture started")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start evidence capture", e)
+        }
     }
 
-    private fun stopMonitoring() {
-        if (!isRunning) return
-        isRunning = false
+    private fun stopEvidenceCapture() {
+        try {
+            audioRecorder?.stop()
+            audioRecorder = null
+            Log.d(TAG, "🛑 Native audio recorder stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Audio stop error", e)
+        }
+
+        try {
+            cameraCapture?.stop()
+            cameraCapture = null
+            Log.d(TAG, "🛑 Native camera capture stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera stop error", e)
+        }
+    }
+
+    // ============ FOREGROUND SERVICE ============
+
+    private fun ensureForegroundService() {
+        if (!isServiceRunning) {
+            isServiceRunning = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+            Log.d(TAG, "✅ Foreground service started")
+        } else {
+            updateNotification()
+        }
+    }
+
+    private fun stopEverything() {
+        if (!isServiceRunning) return
 
         sensorManager.unregisterListener(this)
-        stopForeground(true)
+        isServiceRunning = false
+        isShakeEnabled = false
+        isEmergencyActive = false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
-
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean("flutter.safeguard_shake_enabled", false).apply()
-
-        Log.d(TAG, "🛑 Shake detection stopped")
+        Log.d(TAG, "🛑 Service stopped")
     }
 
-    // ============ SENSOR EVENTS ============
+    // ============ SHAKE DETECTION ============
+
+    private fun enableShakeDetection() {
+        if (isShakeEnabled) return
+        isShakeEnabled = true
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            Log.d(TAG, "✅ Shake detection enabled")
+        } ?: Log.e(TAG, "❌ No accelerometer")
+    }
+
+    private fun disableShakeDetection() {
+        if (!isShakeEnabled) return
+        isShakeEnabled = false
+        sensorManager.unregisterListener(this)
+        Log.d(TAG, "🛑 Shake detection disabled")
+    }
+
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
-        if (!isRunning) return
+        if (!isShakeEnabled) return
 
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
-
-        // Calculate g-force (excluding gravity)
         val gForce = sqrt(x * x + y * y + z * z) / SensorManager.GRAVITY_EARTH
 
         val now = System.currentTimeMillis()
-
-        // Cooldown check
         if (now - lastTriggerTime < COOLDOWN_MS) return
 
         if (gForce > SHAKE_THRESHOLD_G) {
@@ -171,12 +344,11 @@ class ShakeDetectionService : Service(), SensorEventListener {
             } else {
                 shakeCount++
                 Log.d(TAG, "Shake $shakeCount detected (gForce=$gForce)")
-
                 if (shakeCount >= SHAKE_COUNT_REQUIRED) {
-                    Log.d(TAG, "🚨 SHAKE PATTERN DETECTED — triggering SOS")
+                    Log.d(TAG, "🚨 SHAKE PATTERN DETECTED")
                     shakeCount = 0
                     lastTriggerTime = now
-                    triggerSos()
+                    triggerSosFromShake()
                 }
             }
         }
@@ -184,57 +356,124 @@ class ShakeDetectionService : Service(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    // ============ SOS LOGIC ============
-    private fun triggerSos() {
+    // ============ SOS TRIGGER ============
+
+    private fun triggerSosFromShake() {
         scope.launch {
             try {
                 val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                val token = prefs.getString(KEY_TOKEN, null)
-                if (token.isNullOrEmpty()) {
-                    Log.w(TAG, "No auth token — cannot trigger SOS")
-                    return@launch
-                }
-
-                val lat = extractDouble(prefs.getString(KEY_LAST_LAT, null))
-                    ?.takeIf { it != 0.0 }
-                val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null))
-                    ?.takeIf { it != 0.0 }
-
-                if (lat == null || lng == null) {
-                    Log.w(TAG, "No last known location")
-                    return@launch
-                }
-
+                val token = prefs.getString(KEY_TOKEN, null) ?: return@launch
+                val lat = extractDouble(prefs.getString(KEY_LAST_LAT, null)) ?: return@launch
+                val lng = extractDouble(prefs.getString(KEY_LAST_LNG, null)) ?: return@launch
                 val apiBase = prefs.getString(KEY_API_BASE, null)
                     ?: "https://safetyguard-fcn6.onrender.com/api"
 
-                Log.d(TAG, "Starting emergency at $lat,$lng")
+                val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng)
+                if (emergencyId == null) return@launch
 
-                // 1. Create emergency
-                val emergencyId = startEmergencyApi(apiBase, token, lat, lng)
-                    ?: return@launch
+                val userName = prefs.getString(KEY_USER_NAME, "User") ?: "User"
+                val sentCount = sendPersonalizedSms(links, userName)
+                Log.d(TAG, "SOS triggered. Sent $sentCount/${links.size} SMS")
 
-                // 2. Generate web link
-                val webUrl = generateWebStreamApi(apiBase, token, emergencyId)
+                prefs.edit()
+                    .putString(KEY_EMERGENCY_ID, emergencyId)
+                    .putBoolean(KEY_EMERGENCY_ACTIVE, true)
+                    .apply()
 
-                // 3. Send SMS to contacts
-                sendSmsToContacts(prefs, token, apiBase, lat, lng, webUrl)
-
-                // 4. Open app to Emergency Mode
-                openApp()
+                isEmergencyActive = true
+                updateNotificationFromMain()
+                startEvidenceCapture()
             } catch (e: Exception) {
                 Log.e(TAG, "SOS trigger failed", e)
             }
         }
     }
 
+    // ============ NOTIFICATION ============
+
+    private fun buildNotification(): Notification {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "SafeGuard Monitoring",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "Keeps SafeGuard features active"
+                setShowBadge(false)
+            }
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(channel)
+        }
+
+        val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val pi = PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        val title: String
+        val text: String
+        if (isEmergencyActive) {
+            title = "🚨 SafeGuard EMERGENCY"
+            text = "Recording audio & sharing location"
+        } else if (isShakeEnabled) {
+            title = "SafeGuard is Active"
+            text = "Shake phone 3 times to send SOS"
+        } else {
+            title = "SafeGuard"
+            text = "Monitoring active"
+        }
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun updateNotification() {
+        if (isServiceRunning) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    private fun updateNotificationFromMain() {
+        android.os.Handler(mainLooper).post { updateNotification() }
+    }
+
+    // ============ HELPERS ============
+
+    private fun persistEmergencyFlag(active: Boolean) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_EMERGENCY_ACTIVE, active).apply()
+    }
+
+    private fun normalizePhone(phone: String): String {
+        var cleaned = phone.replace(Regex("[^0-9]"), "")
+        if (cleaned.startsWith("0")) cleaned = cleaned.substring(1)
+        return if (!cleaned.startsWith("91")) "+91$cleaned" else "+$cleaned"
+    }
+
+    private fun extractDouble(raw: String?): Double? {
+        if (raw.isNullOrEmpty()) return null
+        raw.toDoubleOrNull()?.let { return it }
+        return Regex("""-?\d+\.?\d*""").findAll(raw).lastOrNull()?.value?.toDoubleOrNull()
+    }
+
     // ============ API CALLS ============
+
     private fun startEmergencyApi(
         apiBase: String,
         token: String,
         lat: Double,
         lng: Double,
-    ): String? {
+    ): Pair<String?, List<ReceiverLink>> {
         return try {
             val url = URL("$apiBase/emergency/start")
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -262,161 +501,79 @@ class ShakeDetectionService : Service(), SensorEventListener {
             Log.d(TAG, "startEmergency [$code]: $respText")
 
             if (code in 200..299) {
-                val e = JSONObject(respText).optJSONObject("emergency")
-                e?.optString("id")?.takeIf { it.isNotEmpty() }
-                    ?: e?.optString("_id")?.takeIf { it.isNotEmpty() }
-            } else null
-        } catch (e: Exception) {
-            Log.e(TAG, "startEmergencyApi failed", e)
-            null
-        }
-    }
+                val json = JSONObject(respText)
+                val emergency = json.optJSONObject("emergency")
+                val emergencyId = emergency?.optString("id")?.takeIf { it.isNotEmpty() }
+                    ?: emergency?.optString("_id")?.takeIf { it.isNotEmpty() }
 
-    private fun generateWebStreamApi(
-        apiBase: String,
-        token: String,
-        emergencyId: String,
-    ): String {
-        return try {
-            val url = URL("$apiBase/emergency/$emergencyId/web-stream")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Authorization", "Bearer $token")
-                doOutput = true
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-
-            val code = conn.responseCode
-            val respText = if (code in 200..299) {
-                conn.inputStream.bufferedReader().readText()
-            } else ""
-
-            Log.d(TAG, "webStream [$code]: $respText")
-
-            if (code in 200..299) JSONObject(respText).optString("webUrl", "") else ""
-        } catch (e: Exception) {
-            Log.e(TAG, "generateWebStreamApi failed", e)
-            ""
-        }
-    }
-
-    private fun sendSmsToContacts(
-        prefs: SharedPreferences,
-        token: String,
-        apiBase: String,
-        lat: Double,
-        lng: Double,
-        webUrl: String,
-    ) {
-        try {
-            val url = URL("$apiBase/contacts")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                setRequestProperty("Authorization", "Bearer $token")
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-
-            val code = conn.responseCode
-            if (code !in 200..299) return
-
-            val respText = conn.inputStream.bufferedReader().readText()
-            val contacts: JSONArray = JSONObject(respText).optJSONArray("contacts") ?: return
-
-            val userName = prefs.getString(KEY_USER_NAME, "User") ?: "User"
-            val message = if (webUrl.isNotEmpty()) {
-                "EMERGENCY! $userName needs help. Track live: $webUrl"
-            } else {
-                "EMERGENCY! $userName needs help. Location: https://maps.google.com/?q=$lat,$lng"
-            }
-
-            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                getSystemService(SmsManager::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                SmsManager.getDefault()
-            }
-
-            for (i in 0 until contacts.length()) {
-                val phone = contacts.getJSONObject(i).optString("phone", "")
-                if (phone.isNotEmpty()) {
-                    try {
-                        smsManager.sendTextMessage(normalizePhone(phone), null, message, null, null)
-                        Log.d(TAG, "SMS sent to $phone")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed SMS to $phone", e)
+                val links = mutableListOf<ReceiverLink>()
+                val linksArray = json.optJSONArray("receiverLinks")
+                if (linksArray != null) {
+                    for (i in 0 until linksArray.length()) {
+                        val obj = linksArray.getJSONObject(i)
+                        links.add(
+                            ReceiverLink(
+                                contactName = obj.optString("contactName", ""),
+                                contactPhone = obj.optString("contactPhone", ""),
+                                webUrl = obj.optString("webUrl", ""),
+                                token = obj.optString("token", ""),
+                            )
+                        )
                     }
                 }
+                Pair(emergencyId, links)
+            } else {
+                Pair(null, emptyList())
             }
         } catch (e: Exception) {
-            Log.e(TAG, "sendSmsToContacts failed", e)
+            Log.e(TAG, "startEmergencyApi failed", e)
+            Pair(null, emptyList())
         }
     }
 
-    // ============ HELPERS ============
-    private fun buildNotification(): Notification {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "SafeGuard Monitoring",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "Keeps shake detection active"
-                setShowBadge(false)
+    private fun sendPersonalizedSms(
+        links: List<ReceiverLink>,
+        userName: String,
+    ): Int {
+        if (links.isEmpty()) return 0
+
+        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(SmsManager::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            SmsManager.getDefault()
+        }
+
+        var sentCount = 0
+        for (link in links) {
+            if (link.contactPhone.isEmpty()) continue
+            val message = "Hi ${link.contactName}, $userName has activated an SOS alert! " +
+                    "Please help. Track live: ${link.webUrl}"
+            try {
+                smsManager.sendTextMessage(
+                    normalizePhone(link.contactPhone),
+                    null,
+                    message,
+                    null,
+                    null,
+                )
+                sentCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "SMS failed to ${link.contactName}", e)
             }
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(channel)
         }
-
-        val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pi = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SafeGuard is Active")
-            .setContentText("Shake phone 3 times to trigger SOS")
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentIntent(pi)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        return sentCount
     }
 
-    private fun openApp() {
-        try {
-            val intent = packageManager.getLaunchIntentForPackage(packageName)
-            intent?.apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("from_tile", true)  // reuse flag → auto-navigate to Emergency Mode
-            }
-            if (intent != null) startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open app", e)
-        }
-    }
-
-    private fun normalizePhone(phone: String): String {
-        var cleaned = phone.replace(Regex("[^0-9]"), "")
-        if (cleaned.startsWith("0")) cleaned = cleaned.substring(1)
-        return if (!cleaned.startsWith("91")) "+91$cleaned" else "+$cleaned"
-    }
-
-    private fun extractDouble(raw: String?): Double? {
-        if (raw.isNullOrEmpty()) return null
-        raw.toDoubleOrNull()?.let { return it }
-        return Regex("""-?\d+\.?\d*""").findAll(raw).lastOrNull()?.value?.toDoubleOrNull()
+    override fun onBind(intent: Intent): IBinder? {
+        super.onBind(intent)
+        return null
     }
 
     override fun onDestroy() {
         super.onDestroy()
         sensorManager.unregisterListener(this)
+        stopEvidenceCapture()
         scope.cancel()
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 }
