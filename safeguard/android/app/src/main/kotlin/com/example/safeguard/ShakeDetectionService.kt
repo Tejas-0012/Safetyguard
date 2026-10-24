@@ -186,7 +186,7 @@ private fun startVoiceDetection() {
                 if (isEmergencyActive || now - lastTriggerTime < COOLDOWN_MS) return@collect
                 lastTriggerTime = now
                 Log.d(TAG, "Wake word 'code red' (score=${d.score})")
-                triggerSosFromShake()
+                triggerSosFromShake("voice")
             }
         }
         Log.d(TAG, "Voice detection started")
@@ -358,7 +358,7 @@ private fun stopVoiceDetection() {
 
     // ============ SOS TRIGGER ============
 
-    private fun triggerSosFromShake() {
+    private fun triggerSosFromShake(source: String = "shake") {
         scope.launch {
             try {
                 val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -368,7 +368,7 @@ private fun stopVoiceDetection() {
                 val apiBase = prefs.getString(KEY_API_BASE, null)
                     ?: "https://safetyguard-fcn6.onrender.com/api"
 
-                val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng)
+                val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng,"shake")
                 if (emergencyId == null) return@launch
 
                 val userName = prefs.getString(KEY_USER_NAME, "User") ?: "User"
@@ -473,6 +473,7 @@ private fun stopVoiceDetection() {
         token: String,
         lat: Double,
         lng: Double,
+        triggerSource: String,
     ): Pair<String?, List<ReceiverLink>> {
         return try {
             val url = URL("$apiBase/emergency/start")
@@ -488,6 +489,7 @@ private fun stopVoiceDetection() {
             val body = JSONObject().apply {
                 put("latitude", lat)
                 put("longitude", lng)
+                put("triggerSource",triggerSource)
             }
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
 

@@ -117,7 +117,7 @@ class SafeGuardTileService : TileService() {
 
         Log.d(TAG, "Starting emergency at $lat,$lng via $apiBase")
 
-        val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng)
+        val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng,"tile")
         if (emergencyId == null) {
             Log.e(TAG, "Failed to create emergency")
             return
@@ -144,6 +144,7 @@ class SafeGuardTileService : TileService() {
         token: String,
         lat: Double,
         lng: Double,
+        triggerSource: String,
     ): Pair<String?, List<ReceiverLink>> {
         return try {
             val url = URL("$apiBase/emergency/start")
@@ -159,6 +160,7 @@ class SafeGuardTileService : TileService() {
             val body = JSONObject().apply {
                 put("latitude", lat)
                 put("longitude", lng)
+                put("triggerSource", triggerSource)
             }
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
 

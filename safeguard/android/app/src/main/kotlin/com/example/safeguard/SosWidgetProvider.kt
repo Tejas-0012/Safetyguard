@@ -152,7 +152,7 @@ class SosWidgetProvider : AppWidgetProvider() {
 
         Log.d(TAG, "Starting emergency at $lat,$lng via $apiBase")
 
-        val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng)
+        val (emergencyId, links) = startEmergencyApi(apiBase, token, lat, lng,"widget")
         if (emergencyId == null) {
             Log.e(TAG, "Failed to create emergency")
             return false
@@ -180,6 +180,7 @@ class SosWidgetProvider : AppWidgetProvider() {
         token: String,
         lat: Double,
         lng: Double,
+        triggerSource: String,
     ): Pair<String?, List<ReceiverLink>> {
         return try {
             val url = URL("$apiBase/emergency/start")
@@ -195,6 +196,7 @@ class SosWidgetProvider : AppWidgetProvider() {
             val body = JSONObject().apply {
                 put("latitude", lat)
                 put("longitude", lng)
+                put("triggerSource", triggerSource)
             }
             OutputStreamWriter(conn.outputStream).use { it.write(body.toString()) }
 

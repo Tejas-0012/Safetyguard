@@ -83,6 +83,7 @@ class SosTriggerService {
       final emergencyResponse = await _apiService.startEmergency({
         'latitude': position.latitude,
         'longitude': position.longitude,
+        'triggerSource': 'button',
       });
 
       if (emergencyResponse['success'] != true) {
