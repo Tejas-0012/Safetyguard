@@ -160,7 +160,7 @@ updateAudio();
     if (emergency.status === 'active') {
         if (statusValue) {
             statusValue.textContent = triggerText;
-            statusValue.textContent = '#ff1744';
+            statusValue.style.color = '#ff1744';
             statusValue.style.fontSize = '16px';
         }
         if (statusBadge) statusBadge.textContent = '● ACTIVE';
