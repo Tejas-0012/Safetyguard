@@ -11,8 +11,6 @@ import '../providers/emergency_provider.dart';
 import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
-import '../services/audio_recording_service.dart';
-import '../services/camera_capture_service.dart';
 import '../services/foreground_service.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
@@ -28,6 +26,7 @@ class EmergencyModeScreen extends StatefulWidget {
 
 class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   Timer? _refreshTimer;
+  Timer? _stopListenerTimer;
   List<ReceiverLink> _receiverLinks = [];
   late GoogleMapController _mapController;
   Set<Marker> _markers = {};
@@ -35,10 +34,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   bool _isCapturingImage = false;
   bool _isSendingSms = false;
   BitmapDescriptor? _personIcon;
-  final AudioRecordingService _audioService = AudioRecordingService();
-  bool _isRecordingAudio = false;
-  final CameraCaptureService _cameraService = CameraCaptureService();
-  bool _isAutoCapturing = false;
 
   LocationProvider? _locationProvider;
   EmergencyProvider? _emergencyProvider;
@@ -52,61 +47,34 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     _setupEmergencyTracking();
 
     // ✅ Poll backend for receiver locations every 5 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (!mounted) return;
       _refreshReceiverLocations();
     });
-
-    // ✅ Start audio recording after slight delay (wait for emergency to load)
-    Future.delayed(const Duration(seconds: 2), () {
-      _startAudioRecording();
-    });
-    // ✅ Start camera auto-capture after audio starts
-    Future.delayed(const Duration(seconds: 4), () {
-      _startCameraCapture();
-    });
   }
 
-  Future<void> _startAudioRecording() async {
-    final provider = Provider.of<EmergencyProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  void _listenToNativeStop() {
+    _stopListenerTimer?.cancel();
+    _stopListenerTimer = Timer.periodic(const Duration(seconds: 2), (
+      timer,
+    ) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
 
-    final emergencyId = provider.currentEmergency?.id;
-    final token = await _getAuthToken();
+      final prefs = await SharedPreferences.getInstance();
+      final isActive =
+          prefs.getBool('flutter.safeguard_emergency_active') ?? false;
 
-    if (emergencyId == null || token == null) {
-      print('❌ Cannot start audio: missing emergencyId or token');
-      return;
-    }
-
-    final started = await _audioService.startRecording(
-      emergencyId: emergencyId,
-      authToken: token,
-    );
-
-    if (mounted) {
-      setState(() => _isRecordingAudio = started);
-    }
-  }
-
-  Future<void> _startCameraCapture() async {
-    final provider = Provider.of<EmergencyProvider>(context, listen: false);
-    final emergencyId = provider.currentEmergency?.id;
-    final token = await _getAuthToken();
-
-    if (emergencyId == null || token == null) {
-      print('❌ Cannot start camera: missing emergencyId or token');
-      return;
-    }
-
-    final started = await _cameraService.start(
-      emergencyId: emergencyId,
-      authToken: token,
-    );
-
-    if (mounted) {
-      setState(() => _isAutoCapturing = started);
-    }
+      // If native stopped it, pop out!
+      if (!isActive) {
+        timer.cancel();
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
+    });
   }
 
   Future<String?> _getAuthToken() async {
@@ -119,15 +87,12 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   }
 
   Future<void> _loadPersonIcon() async {
-    // ⚠️ Temporarily disable custom PNG (bad image caused marker crash)
-    // Use Google's built-in blue marker instead
     if (mounted) {
       setState(() {
         _personIcon = BitmapDescriptor.defaultMarkerWithHue(
           BitmapDescriptor.hueAzure,
         );
       });
-      print('✅ Using default blue marker (custom PNG disabled)');
     }
   }
 
@@ -141,46 +106,22 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
     try {
       final response = await provider.getEmergencyDetails(emergencyId);
-      print('🔄 getEmergencyDetails success: ${response['success']}');
-
       if (response['success'] == true && response['emergency'] != null) {
         final em = Emergency.fromJson(response['emergency']);
-        print('📱 Receiver links received: ${em.receiverLinks.length}');
-
-        for (final link in em.receiverLinks) {
-          print(
-            '   - ${link.contactName}: '
-            'linkOpened=${link.linkOpened}, '
-            'hasLocation=${link.hasLocation}, '
-            'lat=${link.latitude}, '
-            'lng=${link.longitude}, '
-            'isSharing=${link.isSharingLocation}',
-          );
-        }
 
         if (mounted) {
           setState(() {
             _receiverLinks = em.receiverLinks;
           });
-          // ✅ Rebuild markers after updating receiver links
           final victimPos = _locationProvider?.currentPosition;
           if (victimPos != null) {
             _buildAllMarkers(LatLng(victimPos.latitude, victimPos.longitude));
           }
         }
-      } else {
-        print('❌ getEmergencyDetails failed: ${response['message']}');
       }
     } catch (e) {
       print('❌ Failed to refresh receiver locations: $e');
     }
-  }
-
-  Future<BitmapDescriptor> _getPersonMarkerIcon() async {
-    return await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/icon/person_marker.png',
-    );
   }
 
   void _onLocationChanged() {
@@ -197,7 +138,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
   }
 
-  // ============ EMERGENCY HEADER ============
   Widget _buildEmergencyHeader(dynamic emergency) {
     return Container(
       width: double.infinity,
@@ -216,7 +156,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
         children: [
           Row(
             children: [
-              // ✅ BACK BUTTON
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(
@@ -261,7 +200,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   ],
                 ),
               ),
-              // Time chip
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -280,75 +218,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                   ),
                 ),
               ),
-              // ✅ REC indicator (if recording)
-              if (_isRecordingAudio) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'REC',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              // ✅ CAM indicator (if auto-capturing)
-              if (_isAutoCapturing) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.camera_alt,
-                        color: Colors.white,
-                        size: 10,
-                      ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'CAM',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ],
@@ -360,7 +229,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     final victimPos = _locationProvider?.currentPosition;
     if (victimPos == null) return const SizedBox.shrink();
 
-    // Only show if at least one receiver has opened the link
     final activeReceivers = _receiverLinks.where((l) => l.linkOpened).toList();
     if (activeReceivers.isEmpty) return const SizedBox.shrink();
 
@@ -403,7 +271,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                 link.longitude!,
               );
               distanceText = _formatDistance(distance);
-              // Assume average speed of 40 km/h
               etaMinutes = (distance / 1000) / 40 * 60;
             }
 
@@ -468,22 +335,10 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _stopListenerTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
-    _stopAudioAndDispose();
-    _cameraService.stop();
     ForegroundService.stopEmergency();
     super.dispose();
-  }
-
-  Future<void> _stopAudioAndDispose() async {
-    try {
-      final token = await _getAuthToken();
-      if (token != null && _isRecordingAudio) {
-        await _audioService.stopRecording(authToken: token);
-      }
-    } catch (e) {
-      print('❌ Error stopping audio: $e');
-    }
   }
 
   void _updateLocation(double lat, double lng) {
@@ -496,7 +351,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   void _buildAllMarkers(LatLng victimPos) {
     final Set<Marker> newMarkers = {};
 
-    // ✅ Victim marker (red)
     newMarkers.add(
       Marker(
         markerId: const MarkerId('victim'),
@@ -506,7 +360,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       ),
     );
 
-    // ✅ Receiver markers (blue person icons + name)
     for (final link in _receiverLinks) {
       if (!link.hasLocation) continue;
 
@@ -526,7 +379,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
             title: link.contactName,
             snippet: '${_formatDistance(distanceMeters)} away',
           ),
-          // ✅ Use built-in info icon (person) with blue hue
           icon:
               _personIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
@@ -541,7 +393,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
   }
 
-  // ============ SEND SMS ============
   Future<void> _sendSmsToContacts() async {
     final emergencyProvider = Provider.of<EmergencyProvider>(
       context,
@@ -609,7 +460,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     final locationProvider = Provider.of<LocationProvider>(context);
     final position = locationProvider.currentPosition;
 
-    // ============ EMPTY STATE ============
     if (emergency == null) {
       return Scaffold(
         backgroundColor: AppColors.background,
@@ -661,15 +511,16 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
 
     // ============ EMERGENCY MODE ============
+    if (_stopListenerTimer == null) {
+      _listenToNativeStop();
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
-            // ============ 1. FIXED HEADER ============
             _buildEmergencyHeader(emergency),
-
-            // ============ 2. FIXED MAP (260px height) ============
             Container(
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               height: 240,
@@ -699,26 +550,16 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                       ),
               ),
             ),
-
-            // ============ 3. SCROLLABLE CONTENT BELOW MAP ============
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Receiver status card
                     _buildReceiverStatusCard(),
-
-                    // Spacing
                     const SizedBox(height: 12),
-
-                    // Status card (Location + contacts)
                     _buildStatusCard(emergency),
-
                     const SizedBox(height: 12),
-
-                    // Action buttons (Capture + Send SMS)
                     Row(
                       children: [
                         Expanded(
@@ -742,10 +583,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 12),
-
-                    // View Replies button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
@@ -780,10 +618,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
-                    // Emergency call buttons card
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -799,10 +634,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                       ),
                       child: const EmergencyCallButtons(compact: false),
                     ),
-
                     const SizedBox(height: 12),
-
-                    // Stop Emergency button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -846,7 +678,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     );
   }
 
-  // ============ ACTION BUTTON WIDGET ============
   Widget _buildActionButton({
     required IconData icon,
     required String label,
@@ -881,14 +712,11 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     );
   }
 
-  // ============ CAPTURE IMAGE ============
   Future<void> _captureImage() async {
     setState(() => _isCapturingImage = true);
-
     try {
       final picker = ImagePicker();
       final image = await picker.pickImage(source: ImageSource.camera);
-
       if (image != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -911,7 +739,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
   }
 
-  // ============ STATUS CARD (Location + Contacts) ============
   Widget _buildStatusCard(dynamic emergency) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -992,7 +819,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     );
   }
 
-  // ============ STOP EMERGENCY ============
   void _stopEmergency(BuildContext context, EmergencyProvider provider) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1024,6 +850,11 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
     if (confirmed == true && provider.currentEmergency != null) {
       await provider.stopEmergency(provider.currentEmergency!.id);
+      await ForegroundService.stopEmergency();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('flutter.safeguard_emergency_active', false);
+
       if (mounted) {
         Navigator.pop(context);
       }
@@ -1031,7 +862,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   }
 
   String _formatTime(DateTime date) {
-    // ✅ Convert UTC → Local before displaying
     final local = date.toLocal();
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }

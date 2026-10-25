@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/settings_provider.dart';
 import '../providers/auth_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -66,7 +67,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     radius: 60,
                     backgroundColor: const Color(0xFF1A237E),
                     child: Text(
-                      user.name.isNotEmpty ? user.name.substring(0, 1).toUpperCase() : '?',
+                      user.name.isNotEmpty
+                          ? user.name.substring(0, 1).toUpperCase()
+                          : '?',
                       style: const TextStyle(
                         fontSize: 50,
                         fontWeight: FontWeight.bold,
@@ -149,7 +152,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 30),
-
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Safety Settings',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Consumer<SettingsProvider>(
+                      builder: (context, settings, child) {
+                        return Column(
+                          children: [
+                            SwitchListTile(
+                              title: const Text('Shake to Trigger SOS'),
+                              subtitle: const Text(
+                                'Shake phone 3 times to alert',
+                              ),
+                              value: settings.isShakeEnabled,
+                              onChanged: (val) => settings.toggleShake(val),
+                              secondary: const Icon(
+                                Icons.vibration,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            SwitchListTile(
+                              title: const Text('Voice Activation'),
+                              subtitle: const Text(
+                                'Say "Activate SafeGuard" to alert',
+                              ),
+                              value: settings.isVoiceEnabled,
+                              onChanged: (val) => settings.toggleVoice(val),
+                              secondary: const Icon(
+                                Icons.mic,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -216,7 +269,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(authProvider.error ?? 'Failed to update profile')),
+        SnackBar(
+          content: Text(authProvider.error ?? 'Failed to update profile'),
+        ),
       );
     }
   }

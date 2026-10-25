@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 
+import 'providers/settings_provider.dart';
 import 'firebase_options.dart';
 
 // Providers
@@ -87,6 +88,7 @@ void main() async {
           create: (_) =>
               LocationProvider(locationService, storage: storageService),
         ),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
         Provider<SmsService>.value(value: smsService),
         Provider<StorageService>.value(value: storageService),
         Provider<SosTriggerService>.value(value: sosTriggerService),

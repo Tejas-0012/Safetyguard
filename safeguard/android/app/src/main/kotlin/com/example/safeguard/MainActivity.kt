@@ -1,5 +1,5 @@
 package com.example.safeguard
-
+import android.util.Log
 import android.content.Intent
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -34,6 +34,7 @@ class MainActivity : FlutterActivity() {
         flutterEngine.dartExecutor.binaryMessenger,
         CHANNEL,
     ).setMethodCallHandler { call, result ->
+    Log.d("MainActivityChannel", "Received method: ${call.method}")
         when (call.method) {
             "wasLaunchedFromTile" -> result.success(fromTile)
             "clearTileLaunch" -> {
@@ -52,6 +53,15 @@ class MainActivity : FlutterActivity() {
                 val prefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
                 result.success(prefs.getBoolean("flutter.safeguard_shake_enabled", false))
             }
+
+            "startVoiceActivation" -> {
+    VoiceActivationService.start(this)
+    result.success(true)
+}
+"stopVoiceActivation" -> {
+    VoiceActivationService.stop(this)
+    result.success(true)
+}
             // ✅ NEW: Emergency foreground
             "startEmergencyForeground" -> {
                 ShakeDetectionService.startEmergencyMode(this)
