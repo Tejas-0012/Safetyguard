@@ -153,7 +153,7 @@ class CameraCaptureService {
     try {
       controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
@@ -174,10 +174,20 @@ class CameraCaptureService {
         return;
       }
 
-      await _uploadPhoto(file: file, camera: label, index: _captureIndex);
+      final uploaded = await _uploadPhoto(
+        file: file,
+        camera: label,
+        index: _captureIndex,
+      );
 
-      await file.delete();
-      print('✅ Photo $_captureIndex ($label) uploaded (${sizeKB}KB)');
+      if (uploaded) {
+        await file.delete();
+        print('✅ Photo $_captureIndex ($label) uploaded (${sizeKB}KB)');
+      } else {
+        print(
+          '⚠️ Photo $_captureIndex ($label) upload failed, keeping file on device',
+        );
+      }
 
       _captureIndex++;
     } catch (e) {
@@ -189,21 +199,15 @@ class CameraCaptureService {
     }
   }
 
-  Future<void> _uploadPhoto({
+  Future<bool> _uploadPhoto({
+    // 👈 Change Future<void> to Future<bool>
     required File file,
     required String camera,
     required int index,
   }) async {
     try {
       final formData = FormData.fromMap({
-        'image': await MultipartFile.fromFile(
-          file.path,
-          filename: 'emergency_${_emergencyId}_$camera$index.jpg',
-          contentType: DioMediaType('image', 'jpeg'),
-        ),
-        'camera': camera,
-        'captureIndex': index.toString(),
-        'capturedAt': DateTime.now().toUtc().toIso8601String(),
+        // ... your existing fields
       });
 
       final response = await _dio.post(
@@ -214,11 +218,14 @@ class CameraCaptureService {
 
       if (response.data['success'] == true) {
         print('✅ Auto-capture $index uploaded');
+        return true; // 👈 Return true on success
       } else {
         print('❌ Upload failed: ${response.data['message']}');
+        return false;
       }
     } catch (e) {
       print('❌ Upload error: $e');
+      return false; // 👈 Return false on error
     }
   }
 }

@@ -133,7 +133,7 @@ class SafeGuardTileService : TileService() {
             .putBoolean(KEY_EMERGENCY_ACTIVE, true)
             .apply()
 
-        ShakeDetectionService.startEmergencyMode(this,"tile")
+        ShakeDetectionService.startEmergencyMode(this)
         Log.d(TAG, "🚨 Background capture started")
     }
 

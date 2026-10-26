@@ -26,7 +26,6 @@ class EmergencyModeScreen extends StatefulWidget {
 
 class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   Timer? _refreshTimer;
-  Timer? _stopListenerTimer;
   List<ReceiverLink> _receiverLinks = [];
   late GoogleMapController _mapController;
   Set<Marker> _markers = {};
@@ -41,49 +40,18 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   @override
   void initState() {
     super.initState();
+
+    // 👈 Start the Native Kotlin service (camera/audio handled there)
     ForegroundService.startEmergency();
 
     _loadPersonIcon();
     _setupEmergencyTracking();
 
-    // ✅ Poll backend for receiver locations every 5 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    // Poll backend for receiver locations every 5 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!mounted) return;
       _refreshReceiverLocations();
     });
-  }
-
-  void _listenToNativeStop() {
-    _stopListenerTimer?.cancel();
-    _stopListenerTimer = Timer.periodic(const Duration(seconds: 2), (
-      timer,
-    ) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final isActive =
-          prefs.getBool('flutter.safeguard_emergency_active') ?? false;
-
-      // If native stopped it, pop out!
-      if (!isActive) {
-        timer.cancel();
-        if (mounted) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        }
-      }
-    });
-  }
-
-  Future<String?> _getAuthToken() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('token');
-    } catch (e) {
-      return null;
-    }
   }
 
   Future<void> _loadPersonIcon() async {
@@ -99,10 +67,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   Future<void> _refreshReceiverLocations() async {
     final provider = Provider.of<EmergencyProvider>(context, listen: false);
     final emergencyId = provider.currentEmergency?.id;
-    if (emergencyId == null) {
-      print('❌ No emergencyId');
-      return;
-    }
+    if (emergencyId == null) return;
 
     try {
       final response = await provider.getEmergencyDetails(emergencyId);
@@ -138,6 +103,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
   }
 
+  // ============ EMERGENCY HEADER ============
   Widget _buildEmergencyHeader(dynamic emergency) {
     return Container(
       width: double.infinity,
@@ -335,9 +301,11 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _stopListenerTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
+
+    // 👈 Tell the Native service to stop the camera/audio
     ForegroundService.stopEmergency();
+
     super.dispose();
   }
 
@@ -511,10 +479,6 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     }
 
     // ============ EMERGENCY MODE ============
-    if (_stopListenerTimer == null) {
-      _listenToNativeStop();
-    }
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -712,6 +676,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     );
   }
 
+  // Manual capture button for the user (separate from auto-capture)
   Future<void> _captureImage() async {
     setState(() => _isCapturingImage = true);
     try {
@@ -850,10 +815,13 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
 
     if (confirmed == true && provider.currentEmergency != null) {
       await provider.stopEmergency(provider.currentEmergency!.id);
+
+      // Tell the Native service to stop recording
       await ForegroundService.stopEmergency();
 
+      // Clear the flag so the app knows we are safe
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('flutter.safeguard_emergency_active', false);
+      await prefs.setBool('safeguard_emergency_active', false);
 
       if (mounted) {
         Navigator.pop(context);

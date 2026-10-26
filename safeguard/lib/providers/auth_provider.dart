@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:dio/dio.dart';
 
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
@@ -36,34 +35,21 @@ class AuthProvider extends ChangeNotifier {
 
       final token = await _authService.getToken();
       if (token != null) {
-        try {
-          final response = await _authService.getUserProfile();
-          if (response['success'] == true) {
-            _user = UserModel.fromJson(response['user']);
-            _error = null;
-          } else {
-            // Only clear token if backend explicitly says Unauthorized (401)
-            _user = null;
-            await _authService.clearToken();
-          }
-        } on DioException catch (dioError) {
-          // Catch the network error explicitly
-          if (dioError.response?.statusCode == 401) {
-            // ONLY clear if server explicitly says 401
-            _user = null;
-            await _authService.clearToken();
-          } else {
-            // For timeouts/cold starts, keep the user logged in
-            print('⚠️ Network error. Keeping token. ${dioError.message}');
-          }
-        } catch (e) {
-          print('⚠️ Unknown error: $e. Keeping token.');
+        final response = await _authService.getUserProfile();
+        if (response['success'] == true) {
+          _user = UserModel.fromJson(response['user']);
+          _error = null;
+        } else {
+          _user = null;
+          await _authService.clearToken();
         }
       } else {
         _user = null;
       }
     } catch (e) {
-      _error = e.toString();
+      _user = null;
+      await _authService.clearToken();
+      _error = null;
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -1,5 +1,7 @@
 package com.example.safeguard
-
+import com.rementia.openwakeword.lib.WakeWordEngine
+import com.rementia.openwakeword.lib.model.WakeWordModel
+import com.rementia.openwakeword.lib.model.DetectionMode
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -49,7 +51,6 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
         const val ACTION_STOP_SHAKE = "com.example.safeguard.SHAKE_STOP"
         const val ACTION_START_EMERGENCY = "com.example.safeguard.EMERGENCY_START"
         const val ACTION_STOP_EMERGENCY = "com.example.safeguard.EMERGENCY_STOP"
-        const val ACTION_STOP_FROM_NOTIFICATION = "com.example.safeguard.STOP_FROM_NOTIFICATION"
 
         private const val SHAKE_THRESHOLD_G = 2.5f
         private const val SHAKE_COUNT_REQUIRED = 3
@@ -84,17 +85,16 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
             context.startService(intent)
         }
 
-        fun startEmergencyMode(context: Context, triggerSource: String = "button") {
-    val intent = Intent(context, ShakeDetectionService::class.java).apply {
-        action = ACTION_START_EMERGENCY
-        putExtra("TRIGGER_SOURCE", triggerSource)
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
-}
+        fun startEmergencyMode(context: Context) {
+            val intent = Intent(context, ShakeDetectionService::class.java).apply {
+                action = ACTION_START_EMERGENCY
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
 
         fun stopEmergencyMode(context: Context) {
             val intent = Intent(context, ShakeDetectionService::class.java).apply {
@@ -110,12 +110,10 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
     private var isServiceRunning = false
     private var isShakeEnabled = false
     private var isEmergencyActive = false
-    private var currentTriggerSource: String = "button"
 
     private var shakeCount = 0
     private var firstShakeTime = 0L
     private var lastShakeTime = 0L
-        private var lastTriggerTime = 0L
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -131,21 +129,18 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
         when (intent?.action) {
             ACTION_START_SHAKE -> {
                 enableShakeDetection()
+                startVoiceDetection()
                 ensureForegroundService()
                 
             }
             ACTION_STOP_SHAKE -> {
                 disableShakeDetection()
+                stopVoiceDetection()
                 if (!isEmergencyActive) stopEverything()
             }
-            ACTION_STOP_FROM_NOTIFICATION -> {
-    stopEmergencyFromNotification()
-}
             ACTION_START_EMERGENCY -> {
                 isEmergencyActive = true
-
                 persistEmergencyFlag(true)
-                currentTriggerSource = intent.getStringExtra("TRIGGER_SOURCE") ?: "button"
                 ensureForegroundService()
                 updateNotification()
                 startEvidenceCapture()
@@ -154,12 +149,6 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
                 isEmergencyActive = false
                 persistEmergencyFlag(false)
                 stopEvidenceCapture()
-                 val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val voiceEnabled = prefs.getBoolean("flutter.safeguard_voice_enabled", false)
-    if (voiceEnabled) {
-        Log.d(TAG, "Restarting Voice Activation Service after emergency stop")
-        VoiceActivationService.start(this)
-    }
                 if (!isShakeEnabled) {
                     stopEverything()
                 } else {
@@ -170,6 +159,53 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
         return START_STICKY
     }
 
+private var wakeWordEngine: WakeWordEngine? = null
+private var voiceJob: kotlinx.coroutines.Job? = null
+@Volatile private var lastTriggerTime = 0L
+
+private fun startVoiceDetection() {
+    if (wakeWordEngine != null) return
+    if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        Log.w(TAG, "No RECORD_AUDIO, skipping voice detection")
+        return
+    }
+    try {
+        val model = WakeWordModel("code_red", "code_red.onnx", 0.7f)
+        val engine = WakeWordEngine(
+            applicationContext,
+            listOf(model),
+            DetectionMode.SINGLE_BEST
+        )
+        wakeWordEngine = engine
+        engine.start()
+
+        voiceJob = scope.launch {
+            engine.detections.collect { d ->
+                val now = System.currentTimeMillis()
+                if (isEmergencyActive || now - lastTriggerTime < COOLDOWN_MS) return@collect
+                lastTriggerTime = now
+                Log.d(TAG, "Wake word 'code red' (score=${d.score})")
+                triggerSosFromShake("voice")
+            }
+        }
+        Log.d(TAG, "Voice detection started")
+    } catch (e: Exception) {
+        Log.e(TAG, "Voice detection failed to start", e)
+        wakeWordEngine = null
+    }
+}
+
+private fun stopVoiceDetection() {
+    voiceJob?.cancel(); voiceJob = null
+    try {
+        wakeWordEngine?.stop()
+        wakeWordEngine?.release()
+    } catch (e: Exception) {
+        Log.e(TAG, "Wake word stop error", e)
+    }
+    wakeWordEngine = null
+}
 
     // ============ EVIDENCE CAPTURE ============
 
@@ -224,48 +260,6 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
             Log.d(TAG, "🛑 Native camera capture stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Camera stop error", e)
-        }
-    }
-
-        private fun stopEmergencyFromNotification() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        
-        // 1. Tell Flutter we stopped it
-        prefs.edit().putBoolean(KEY_EMERGENCY_ACTIVE, false).apply()
-        
-        val emergencyId = prefs.getString(KEY_EMERGENCY_ID, null)
-        val token = prefs.getString(KEY_TOKEN, null)
-        val apiBase = prefs.getString(KEY_API_BASE, null) ?: "https://safetyguard-fcn6.onrender.com/api"
-
-        if (emergencyId != null && token != null) {
-            scope.launch {
-                try {
-                    val url = URL("$apiBase/emergency/$emergencyId/stop")
-                    val conn = (url.openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        setRequestProperty("Authorization", "Bearer $token")
-                    }
-                    conn.responseCode 
-                    Log.d(TAG, "Emergency stopped via notification")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to stop emergency via API", e)
-                }
-            }
-        }
-        
-        // 2. Cleanly trigger the stop without recursion
-        isEmergencyActive = false
-        stopEvidenceCapture()
-        
-        val voiceEnabled = prefs.getBoolean("flutter.safeguard_voice_enabled", false)
-        if (voiceEnabled) {
-            VoiceActivationService.start(this)
-        }
-
-        if (!isShakeEnabled) {
-            stopEverything()
-        } else {
-            updateNotification()
         }
     }
 
@@ -387,7 +381,6 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
                     .apply()
 
                 isEmergencyActive = true
-                currentTriggerSource = source
                 updateNotificationFromMain()
                 startEvidenceCapture()
             } catch (e: Exception) {
@@ -424,14 +417,7 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
         val text: String
         if (isEmergencyActive) {
             title = "🚨 SafeGuard EMERGENCY"
-            val triggerText = when (currentTriggerSource) {
-            "voice" -> "🎤 Voice Activation"
-            "shake" -> "📳 Shake Detection"
-            "tile" -> "⚙️ Quick Settings Tile"
-            "widget" -> "📱 Home Screen Widget"
-            else -> "👆 App Button"
-        }
-        text = "Triggered by: $triggerText"
+            text = "Recording audio & sharing location"
         } else if (isShakeEnabled) {
             title = "SafeGuard is Active"
             text = "Shake phone 3 times to send SOS"
@@ -440,38 +426,15 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
             text = "Monitoring active"
         }
 
-                // 1. Create the builder and save it to a variable
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pi)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-
-        // 2. Add the action if emergency is active
-        if (isEmergencyActive) {
-            val stopIntent = Intent(this, ShakeDetectionService::class.java).apply {
-                action = ACTION_STOP_FROM_NOTIFICATION
-            }
-            val stopPendingIntent = PendingIntent.getService(
-                this, 
-                1, 
-                stopIntent, 
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            builder.addAction(
-                android.R.drawable.ic_menu_close_clear_cancel, 
-                "STOP EMERGENCY", 
-                stopPendingIntent
-            )
-        }
-
-        // 3. Build and return at the very end
-        return builder.build()
+            .build()
     }
-    
 
     private fun updateNotification() {
         if (isServiceRunning) {

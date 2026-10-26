@@ -70,25 +70,35 @@ class CameraCapture(
     }
 
     private fun bindUseCase() {
-        val provider = cameraProvider ?: return
-        val selector = if (useFront) CameraSelector.DEFAULT_FRONT_CAMERA
-                       else CameraSelector.DEFAULT_BACK_CAMERA
+    val provider = cameraProvider ?: return
+    val selector = if (useFront) CameraSelector.DEFAULT_FRONT_CAMERA
+                   else CameraSelector.DEFAULT_BACK_CAMERA
 
-        imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
+    imageCapture = ImageCapture.Builder()
+        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+        .setResolutionSelector(
+            androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    androidx.camera.core.resolutionselector.ResolutionStrategy(
+                        android.util.Size(1280, 960),
+                        androidx.camera.core.resolutionselector.ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                    )
+                ).build()
+        )
+        .setJpegQuality(75)
+        .build()
 
-        try {
-            provider.unbindAll()
-            val owner = context as? LifecycleOwner ?: run {
-                Log.e(TAG, "Context is not LifecycleOwner")
-                return
-            }
-            provider.bindToLifecycle(owner, selector, imageCapture)
-        } catch (e: Exception) {
-            Log.e(TAG, "Bind failed", e)
+    try {
+        provider.unbindAll()
+        val owner = context as? LifecycleOwner ?: run {
+            Log.e(TAG, "Context is not LifecycleOwner")
+            return
         }
+        provider.bindToLifecycle(owner, selector, imageCapture)
+    } catch (e: Exception) {
+        Log.e(TAG, "Bind failed", e)
     }
+}
 
     private fun capturePhoto() {
         if (!isRunning) return
