@@ -13,6 +13,7 @@ const userRoutes = require('./src/routes/userRoutes');
 const contactRoutes = require('./src/routes/contactRoutes');
 const emergencyRoutes = require('./src/routes/emergencyRoutes');
 const errorHandler = require('./src/middleware/errorHandler');
+const livekitRoutes = require('./src/routes/livekitRoutes');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -38,6 +39,10 @@ app.use(cors({
   credentials: true,
 }));
 app.options('*', cors());
+
+
+app.use('/api/livekit', livekitRoutes);
+
 
 // ============ BODY PARSER ============
 app.use(express.json());
