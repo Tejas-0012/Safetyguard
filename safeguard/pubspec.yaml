@@ -56,6 +56,8 @@ dependencies:
   flutter_foreground_task: ^8.0.0
   record: ^7.1.2
   path_provider: ^2.1.6
+  livekit_client: ^2.13.2
+  wakelock_plus: ^1.7.0
   
 
 dev_dependencies:

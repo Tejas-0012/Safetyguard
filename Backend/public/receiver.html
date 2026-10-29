@@ -530,7 +530,19 @@
         <!-- CONTENT -->
         <div id="content" style="display: none;">
 
+<!-- LiveKit Video Section -->
+<div id="videoContainer" style="display: none; position: relative; width: 100%; height: 300px; background: #000; border-radius: 16px; overflow: hidden; margin-bottom: 14px;">
+    <!-- Back Camera (Main) -->
+    <video id="backCamera" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+    
+    <!-- Front Camera (PiP) -->
+    <video id="frontCamera" autoplay playsinline style="position: absolute; bottom: 16px; right: 16px; width: 90px; height: 120px; border-radius: 12px; border: 2px solid white; object-fit: cover; box-shadow: 0 4px 8px rgba(0,0,0,0.5);"></video>
 
+    <!-- Live Badge -->
+    <div style="position: absolute; top: 12px; left: 12px; background: red; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; animation: pulse 1.5s infinite;">
+        🔴 LIVE
+    </div>
+</div>
             <!-- SENDER -->
             <div class="sender-info">
 
@@ -704,6 +716,8 @@
         </div>
 
     </div>
+<!-- LiveKit SDK -->
+ <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 
 
     <!-- EXISTING JAVASCRIPT -->

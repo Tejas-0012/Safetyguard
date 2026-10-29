@@ -75,7 +75,7 @@ renderEmergencyButtons();
 // ============================================
 // Fetch Emergency Data (NEW ENDPOINT)
 // ============================================
-
+let isLiveKitConnected = false;
 async function fetchEmergencyData() {
     if (isFetching) return;
     isFetching = true;
@@ -92,6 +92,10 @@ async function fetchEmergencyData() {
 
         emergency = data.emergency;
         receiver = data.receiver;
+           if (!isLiveKitConnected && emergency && emergency.id) {
+            isLiveKitConnected = true;
+            connectLiveKitVideo(emergency.id);
+        }
         renderUI();
 
     } catch (error) {
@@ -386,6 +390,46 @@ const time = d.toLocaleTimeString('en-IN', {
     }
 }
 
+// ============================================
+// LiveKit Video Streaming
+// ============================================
+async function connectLiveKitVideo(emergencyId) {
+    try {
+        // 1. Fetch a Receiver Token from your Node Backend
+        const response = await fetch(`/api/livekit/token?emergencyId=${emergencyId}&participantName=WebViewer&isReceiver=true`);
+        const data = await response.json();
+        
+        if (!data.success) return;
+
+        // 2. Connect to LiveKit
+        const room = new LivekitClient.Room();
+        
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === LivekitClient.Track.Kind.Video) {
+                
+                // If it's the screen share (our Back Camera), put it in the big video
+                if (publication.source === LivekitClient.Track.Source.ScreenShare) {
+                    track.attach(document.getElementById('backCamera'));
+                } 
+                // If it's the regular camera (Front Camera), put it in the small PiP
+                else {
+                    track.attach(document.getElementById('frontCamera'));
+                }
+                
+                document.getElementById('videoContainer').style.display = 'block';
+            }
+        });
+
+        await room.connect(data.url, data.token);
+        console.log("✅ Connected to LiveKit Video Stream");
+
+    } catch (e) {
+        console.error("LiveKit Error:", e);
+    }
+}
+
+// Call it when page loads (replace 'YOUR_EMERGENCY_ID' dynamically)
+// For now, let's extract it from the URL or just use a dummy test ID
 
 
 // ============================================

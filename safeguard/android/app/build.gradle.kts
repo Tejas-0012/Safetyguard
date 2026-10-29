@@ -46,6 +46,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.0")
     implementation("androidx.camera:camera-lifecycle:1.3.0")
     implementation("xyz.rementia:openwakeword:0.1.5")
+    implementation("io.livekit:livekit-android:2.26.1")
+implementation("io.livekit:livekit-android-camerax:2.26.0")
     
 }
 

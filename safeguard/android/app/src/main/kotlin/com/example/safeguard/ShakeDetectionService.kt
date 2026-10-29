@@ -46,6 +46,7 @@ class ShakeDetectionService : LifecycleService(), SensorEventListener {
 
         private var audioRecorder: AudioRecorder? = null
         private var cameraCapture: CameraCapture? = null
+            private var liveKitManager: LiveKitManager? = null
 
         const val ACTION_START_SHAKE = "com.example.safeguard.SHAKE_START"
         const val ACTION_STOP_SHAKE = "com.example.safeguard.SHAKE_STOP"
@@ -233,13 +234,17 @@ private fun stopVoiceDetection() {
                     Log.d(TAG, "🎙️ Native audio recorder started")
                 }
             }
-
-            if (cameraCapture == null) {
+  // 👈 Start LiveKit Stream via Manager
+            if (liveKitManager == null) {
+                liveKitManager = LiveKitManager(applicationContext, this)
+                liveKitManager?.startStreaming(emergencyId, token, apiBase)
+            }
+            /*if (cameraCapture == null) {
                 cameraCapture = CameraCapture(this, apiBase, token, emergencyId).also {
                     it.start()
                     Log.d(TAG, "📸 Native camera capture started")
                 }
-            }
+            }*/
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start evidence capture", e)
         }
@@ -254,13 +259,16 @@ private fun stopVoiceDetection() {
             Log.e(TAG, "Audio stop error", e)
         }
 
-        try {
+        liveKitManager?.stopStreaming()
+        liveKitManager = null
+
+       /* try {
             cameraCapture?.stop()
             cameraCapture = null
             Log.d(TAG, "🛑 Native camera capture stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Camera stop error", e)
-        }
+        }*/
     }
 
     // ============ FOREGROUND SERVICE ============
