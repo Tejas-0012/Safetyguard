@@ -395,27 +395,28 @@ const time = d.toLocaleTimeString('en-IN', {
 // ============================================
 async function connectLiveKitVideo(emergencyId) {
     try {
-        // 1. Fetch a Receiver Token from your Node Backend
         const response = await fetch(`/api/livekit/token?emergencyId=${emergencyId}&participantName=WebViewer&isReceiver=true`);
         const data = await response.json();
         
         if (!data.success) return;
 
-        // 2. Connect to LiveKit
         const room = new LivekitClient.Room();
         
-                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
             if (track.kind === LivekitClient.Track.Kind.Video) {
+                console.log("🎥 Track Subscribed:", publication.trackName, publication.source);
                 
-                if (publication.source === LivekitClient.Track.Source.ScreenShare) {
-                    const backVideo = document.getElementById('backCamera');
-                    track.attach(backVideo);
-                    backVideo.play().catch(e => console.log("Play blocked:", e)); // 👈 Force play
+                // If it's the back camera, put it in the big video
+                if (publication.trackName === "back_camera" || publication.source === LivekitClient.Track.Source.ScreenShare) {
+                    const el = document.getElementById('backCamera');
+                    track.attach(el);
+                    el.play().catch(e => console.log("Back play blocked:", e));
                 } 
+                // If it's the front camera, put it in the small PiP
                 else {
-                    const frontVideo = document.getElementById('frontCamera');
-                    track.attach(frontVideo);
-                    frontVideo.play().catch(e => console.log("Play blocked:", e)); // 👈 Force play
+                    const el = document.getElementById('frontCamera');
+                    track.attach(el);
+                    el.play().catch(e => console.log("Front play blocked:", e));
                 }
                 
                 document.getElementById('videoContainer').style.display = 'block';
@@ -425,11 +426,18 @@ async function connectLiveKitVideo(emergencyId) {
         await room.connect(data.url, data.token);
         console.log("✅ Connected to LiveKit Video Stream");
 
+        // 👈 ADD THIS: Force video to play when the user clicks anywhere on the page
+        document.body.addEventListener('click', () => {
+            const back = document.getElementById('backCamera');
+            const front = document.getElementById('frontCamera');
+            if (back) back.play();
+            if (front) front.play();
+        }, { once: true }); // Only runs once
+
     } catch (e) {
         console.error("LiveKit Error:", e);
     }
 }
-
 // Call it when page loads (replace 'YOUR_EMERGENCY_ID' dynamically)
 // For now, let's extract it from the URL or just use a dummy test ID
 
