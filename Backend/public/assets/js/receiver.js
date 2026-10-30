@@ -402,17 +402,16 @@ async function connectLiveKitVideo(emergencyId) {
 
         const room = new LivekitClient.Room();
         
-        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
             if (track.kind === LivekitClient.Track.Kind.Video) {
-                console.log("🎥 Track Subscribed:", publication.trackName, publication.source);
                 
-                // If it's the back camera, put it in the big video
-                if (publication.trackName === "back_camera" || publication.source === LivekitClient.Track.Source.ScreenShare) {
+                // If it's the back camera (Primary Camera), put it in the big video
+                if (publication.trackName === "back_camera" || publication.source === LivekitClient.Track.Source.Camera) {
                     const el = document.getElementById('backCamera');
                     track.attach(el);
                     el.play().catch(e => console.log("Back play blocked:", e));
                 } 
-                // If it's the front camera, put it in the small PiP
+                // If it's the front camera (Screen Share), put it in the small PiP
                 else {
                     const el = document.getElementById('frontCamera');
                     track.attach(el);
