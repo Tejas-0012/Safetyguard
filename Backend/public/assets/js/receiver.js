@@ -391,8 +391,68 @@ const time = d.toLocaleTimeString('en-IN', {
 }
 
 // ============================================
-// LiveKit Video Streaming
+// LiveKit Video & Audio Streaming + Remote Camera Control
 // ============================================
+let currentLiveKitRoom = null;
+let currentActiveCamera = 'back'; // 'back' | 'front'
+let isSwitchingCamera = false;
+
+function updateCameraUI(camera) {
+    currentActiveCamera = camera;
+    isSwitchingCamera = false;
+    const badge = document.getElementById('cameraBadge');
+    const btn = document.getElementById('switchCameraBtn');
+
+    if (badge) {
+        badge.innerHTML = camera === 'front' ? '🤳 Front Camera' : '📷 Back Camera';
+    }
+
+    if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = camera === 'front' 
+            ? '<span>🔄</span> Switch to Back' 
+            : '<span>🔄</span> Switch to Front';
+    }
+}
+
+async function requestCameraSwitch(target) {
+    if (!currentLiveKitRoom) {
+        alert("Live stream is not connected yet.");
+        return;
+    }
+    if (isSwitchingCamera) return;
+
+    const nextCamera = target || (currentActiveCamera === 'back' ? 'front' : 'back');
+    isSwitchingCamera = true;
+
+    const btn = document.getElementById('switchCameraBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '<span>⏳</span> Switching...';
+    }
+
+    try {
+        const payload = new TextEncoder().encode(JSON.stringify({
+            action: 'SWITCH_CAMERA',
+            target: nextCamera
+        }));
+        await currentLiveKitRoom.localParticipant.publishData(payload, { reliable: true });
+        console.log(`📤 Sent remote camera switch request: ${nextCamera}`);
+
+        // Safety fallback re-enable after 5s if device hasn't acknowledged
+        setTimeout(() => {
+            if (isSwitchingCamera) {
+                updateCameraUI(currentActiveCamera);
+            }
+        }, 5000);
+    } catch (e) {
+        console.error("Failed to request camera switch:", e);
+        updateCameraUI(currentActiveCamera);
+    }
+}
+
 async function connectLiveKitVideo(emergencyId) {
     try {
         const response = await fetch(`/api/livekit/token?emergencyId=${emergencyId}&participantName=WebViewer&isReceiver=true`);
@@ -401,45 +461,74 @@ async function connectLiveKitVideo(emergencyId) {
         if (!data.success) return;
 
         const room = new LivekitClient.Room();
+        currentLiveKitRoom = room;
         
-                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            console.log(`📡 LiveKit Track Subscribed: ${track.kind} (${publication.trackName})`);
+
             if (track.kind === LivekitClient.Track.Kind.Video) {
-                
-                // If it's the back camera (Primary Camera), put it in the big video
-                if (publication.trackName === "back_camera" || publication.source === LivekitClient.Track.Source.Camera) {
-                    const el = document.getElementById('backCamera');
-                    track.attach(el);
-                    el.play().catch(e => console.log("Back play blocked:", e));
-                } 
-                // If it's the front camera (Screen Share), put it in the small PiP
-                else {
-                    const el = document.getElementById('frontCamera');
-                    track.attach(el);
-                    el.play().catch(e => console.log("Front play blocked:", e));
+                const videoEl = document.getElementById('liveVideoPlayer');
+                if (videoEl) {
+                    track.attach(videoEl);
+                    videoEl.play().catch(e => console.log("Video play pending interaction:", e));
                 }
-                
-                document.getElementById('videoContainer').style.display = 'block';
+
+                const container = document.getElementById('videoContainer');
+                if (container) container.style.display = 'block';
+
+                if (publication.trackName === "front_camera") {
+                    updateCameraUI('front');
+                } else if (publication.trackName === "back_camera") {
+                    updateCameraUI('back');
+                }
+            } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                const audioEl = document.getElementById('liveAudioPlayer');
+                if (audioEl) {
+                    track.attach(audioEl);
+                    audioEl.play().catch(e => console.log("Audio play pending interaction:", e));
+                }
+            }
+        });
+
+        room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, publication) => {
+            console.log(`📡 LiveKit Track Unsubscribed: ${track.kind}`);
+            if (track.kind === LivekitClient.Track.Kind.Video) {
+                const videoEl = document.getElementById('liveVideoPlayer');
+                if (videoEl) track.detach(videoEl);
+            } else if (track.kind === LivekitClient.Track.Kind.Audio) {
+                const audioEl = document.getElementById('liveAudioPlayer');
+                if (audioEl) track.detach(audioEl);
+            }
+        });
+
+        room.on(LivekitClient.RoomEvent.DataReceived, (payload, participant) => {
+            try {
+                const text = new TextDecoder().decode(payload);
+                console.log("📩 LiveKit Data Received:", text);
+                const msg = JSON.parse(text);
+                if (msg.type === "CAMERA_STATE" && msg.activeCamera) {
+                    updateCameraUI(msg.activeCamera);
+                }
+            } catch (err) {
+                console.error("Error parsing LiveKit data message:", err);
             }
         });
 
         await room.connect(data.url, data.token);
-        console.log("✅ Connected to LiveKit Video Stream");
+        console.log("✅ Connected to LiveKit Stream");
 
-        // 👈 ADD THIS: Force video to play when the user clicks anywhere on the page
+        // Force video and audio to play on first user interaction
         document.body.addEventListener('click', () => {
-            const back = document.getElementById('backCamera');
-            const front = document.getElementById('frontCamera');
-            if (back) back.play();
-            if (front) front.play();
-        }, { once: true }); // Only runs once
+            const videoEl = document.getElementById('liveVideoPlayer');
+            const audioEl = document.getElementById('liveAudioPlayer');
+            if (videoEl) videoEl.play().catch(() => {});
+            if (audioEl) audioEl.play().catch(() => {});
+        }, { once: true });
 
     } catch (e) {
-        console.error("LiveKit Error:", e);
+        console.error("LiveKit Connection Error:", e);
     }
 }
-// Call it when page loads (replace 'YOUR_EMERGENCY_ID' dynamically)
-// For now, let's extract it from the URL or just use a dummy test ID
-
 
 // ============================================
 // Replies

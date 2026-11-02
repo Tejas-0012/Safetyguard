@@ -27,7 +27,8 @@ router.get('/token', async (req, res) => {
     at.addGrant({
       roomJoin: true,
       room: emergencyId, // The room name is the emergency ID
-      canPublish: isReceiver !== 'true', // Senders can publish, receivers cannot
+      canPublish: isReceiver !== 'true', // Senders can publish video/audio, receivers cannot
+      canPublishData: true, // Both senders and receivers can send data messages (e.g. remote camera switch)
       canSubscribe: true,
     });
 
