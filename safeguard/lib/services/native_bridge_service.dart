@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 
 /// Bridge for communication between Flutter and native Android.
-/// Detects when the app was opened from the Quick Settings Tile.
 class NativeBridgeService {
   static const MethodChannel _channel = MethodChannel(
     'com.example.safeguard/native',
@@ -27,12 +26,25 @@ class NativeBridgeService {
     }
   }
 
-  /// Register a callback for native → Flutter navigation requests.
-  static void onOpenEmergencyMode(Function onOpen) {
+  /// Register callbacks for native → Flutter events.
+  static void setupNativeCallbacks({
+    required Function onOpenEmergency,
+    required Function onStopEmergency,
+  }) {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'openEmergencyMode') {
-        onOpen();
+        onOpenEmergency();
+      } else if (call.method == 'onEmergencyStopped') {
+        onStopEmergency();
       }
     });
+  }
+
+  /// Deprecated convenience wrapper
+  static void onOpenEmergencyMode(Function onOpen) {
+    setupNativeCallbacks(
+      onOpenEmergency: onOpen,
+      onStopEmergency: () {},
+    );
   }
 }

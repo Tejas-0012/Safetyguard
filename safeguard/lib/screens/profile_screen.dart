@@ -185,7 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             SwitchListTile(
                               title: const Text('Voice Activation'),
                               subtitle: const Text(
-                                'Say "Activate SafeGuard" to alert',
+                                'Say "Code Red" to trigger hands-free SOS',
                               ),
                               value: settings.isVoiceEnabled,
                               onChanged: (val) => settings.toggleVoice(val),

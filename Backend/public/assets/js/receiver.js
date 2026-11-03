@@ -128,6 +128,16 @@ function renderUI() {
     const senderPhone = document.getElementById('senderPhone');
     if (senderPhone) senderPhone.textContent = '📱 ' + (emergency.userPhone || 'No phone');
 
+    const callVictimBtn = document.getElementById('callVictimBtn');
+    if (callVictimBtn) {
+        if (emergency.userPhone && emergency.userPhone.trim()) {
+            callVictimBtn.href = `tel:${emergency.userPhone.trim()}`;
+            callVictimBtn.style.display = 'inline-flex';
+        } else {
+            callVictimBtn.style.display = 'none';
+        }
+    }
+
     const avatar = document.getElementById('avatar');
     if (avatar) avatar.textContent = (emergency.userName || 'U')[0].toUpperCase();
 
@@ -450,6 +460,18 @@ async function requestCameraSwitch(target) {
     } catch (e) {
         console.error("Failed to request camera switch:", e);
         updateCameraUI(currentActiveCamera);
+    }
+}
+
+
+function toggleVideoFullscreen() {
+    const video = document.getElementById('liveVideoPlayer');
+    if (!video) return;
+    if (!document.fullscreenElement) {
+        if (video.requestFullscreen) video.requestFullscreen();
+        else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
+    } else {
+        if (document.exitFullscreen) document.exitFullscreen();
     }
 }
 

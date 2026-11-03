@@ -1,12 +1,12 @@
 import 'package:flutter/services.dart';
 
-/// Bridge between Flutter and the native ShakeDetectionService.
+/// Bridge between Flutter and the native SafeGuardForegroundService for Shake Detection.
 class ShakeService {
   static const MethodChannel _channel = MethodChannel(
     'com.example.safeguard/native',
   );
 
-  /// Start the shake detection foreground service.
+  /// Start shake detection.
   static Future<bool> start() async {
     try {
       final result = await _channel.invokeMethod<bool>('startShakeDetection');
@@ -17,7 +17,7 @@ class ShakeService {
     }
   }
 
-  /// Stop the shake detection service.
+  /// Stop shake detection.
   static Future<bool> stop() async {
     try {
       final result = await _channel.invokeMethod<bool>('stopShakeDetection');

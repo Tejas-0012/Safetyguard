@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/emergency_provider.dart';
+import '../services/emergency_call_service.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -82,6 +83,15 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.call,
+                            color: Colors.green,
+                            size: 20,
+                          ),
+                          tooltip: 'Call',
+                          onPressed: () => EmergencyCallService.dialNumber(context, contact.phone),
+                        ),
                         IconButton(
                           icon: const Icon(
                             Icons.edit,

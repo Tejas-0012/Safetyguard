@@ -69,7 +69,7 @@
 
 <!-- ✅ Shake Detection Service -->
 <service
-    android:name=".ShakeDetectionService"
+    android:name=".SafeGuardForegroundService"
     android:exported="false"
     android:foregroundServiceType="specialUse|camera|microphone">
     <property

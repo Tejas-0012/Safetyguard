@@ -30,7 +30,6 @@ import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/emergency_mode_screen.dart';
-import 'screens/emergency_monitoring_screen.dart';
 import 'screens/profile_screen.dart';
 
 // ✅ GLOBAL — accessible from _MyAppState
@@ -114,11 +113,17 @@ class _MyAppState extends State<MyApp> {
   }
 
   void _setupNativeHandlers() {
-    // Called when tile is tapped while app is already running
-    NativeBridgeService.onOpenEmergencyMode(() {
-      print('📱 Native: openEmergencyMode received');
-      _goToEmergencyMode();
-    });
+    NativeBridgeService.setupNativeCallbacks(
+      onOpenEmergency: () {
+        print('📱 Native: openEmergencyMode received');
+        _goToEmergencyMode();
+      },
+      onStopEmergency: () {
+        print('🛑 Native: onEmergencyStopped received from notification');
+        if (!mounted) return;
+        navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      },
+    );
   }
 
   Future<void> _checkTileLaunch() async {
@@ -186,7 +191,7 @@ class _MyAppState extends State<MyApp> {
         '/home': (context) => const HomeScreen(),
         '/contacts': (context) => const ContactsScreen(),
         '/emergency': (context) => const EmergencyModeScreen(),
-        '/monitor': (context) => const EmergencyMonitoringScreen(),
+        '/monitor': (context) => const EmergencyModeScreen(),
         '/profile': (context) => const ProfileScreen(),
       },
     );

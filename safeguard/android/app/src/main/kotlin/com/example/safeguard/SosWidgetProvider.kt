@@ -167,7 +167,7 @@ class SosWidgetProvider : AppWidgetProvider() {
             .putBoolean(KEY_EMERGENCY_ACTIVE, true)
             .apply()
 
-        ShakeDetectionService.startEmergencyMode(context)
+        SafeGuardForegroundService.startEmergency(context)
         Log.d(TAG, "🚨 Background capture started")
 
         return true

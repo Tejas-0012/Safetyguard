@@ -14,7 +14,7 @@ import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../services/emergency_call_service.dart';
 import 'notifications_screen.dart';
-import 'emergency_monitoring_screen.dart';
+import 'emergency_mode_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -463,7 +463,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const EmergencyMonitoringScreen(),
+                    builder: (context) => const EmergencyModeScreen(),
                   ),
                 );
               }
@@ -639,8 +639,6 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitle: 'Call police, ambulance & more',
           onTap: () => _showEmergencyServicesSheet(context),
         ),
-        const SizedBox(height: 8),
-        _ShakeToggleTile(),
         const SizedBox(height: 8),
 
         _buildActionTile(
@@ -1236,141 +1234,5 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Morning';
     if (hour < 17) return 'Afternoon';
     return 'Evening';
-  }
-}
-
-// ============ SHAKE DETECTION TOGGLE ============
-class _ShakeToggleTile extends StatefulWidget {
-  @override
-  State<_ShakeToggleTile> createState() => _ShakeToggleTileState();
-}
-
-class _ShakeToggleTileState extends State<_ShakeToggleTile> {
-  bool _enabled = false;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkStatus();
-  }
-
-  Future<void> _checkStatus() async {
-    final running = await ShakeService.isRunning();
-    if (mounted) {
-      setState(() {
-        _enabled = running;
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _toggle() async {
-    setState(() => _loading = true);
-    bool newState;
-    if (_enabled) {
-      await ShakeService.stop();
-      newState = false;
-    } else {
-      await ShakeService.start();
-      newState = true;
-    }
-    if (mounted) {
-      setState(() {
-        _enabled = newState;
-        _loading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            newState
-                ? '✅ Shake detection ON — shake 3 times to send SOS'
-                : '🛑 Shake detection OFF',
-          ),
-          backgroundColor: newState ? AppColors.success : AppColors.textMedium,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _loading ? null : _toggle,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(AppColors.radiusLarge),
-          boxShadow: AppColors.softShadow,
-          border: Border.all(
-            color: _enabled
-                ? AppColors.success.withValues(alpha: 0.3)
-                : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: (_enabled ? AppColors.success : AppColors.textLight)
-                    .withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppColors.radiusMedium),
-              ),
-              child: Icon(
-                Icons.vibration_rounded,
-                color: _enabled ? AppColors.success : AppColors.textLight,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Shake Detection',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _enabled
-                        ? 'Active — shake 3x to send SOS'
-                        : 'Tap to enable',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _enabled ? AppColors.success : AppColors.textLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_loading)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            else
-              Switch(
-                value: _enabled,
-                onChanged: (_) => _toggle(),
-                activeThumbColor: AppColors.success,
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }

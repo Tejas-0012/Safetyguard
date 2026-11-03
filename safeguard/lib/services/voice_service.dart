@@ -22,4 +22,13 @@ class VoiceService {
       return false;
     }
   }
+
+  static Future<bool> isRunning() async {
+    try {
+      final r = await _channel.invokeMethod<bool>('isVoiceActivationRunning');
+      return r ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
 }

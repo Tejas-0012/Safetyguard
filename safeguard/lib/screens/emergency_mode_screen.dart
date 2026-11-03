@@ -12,6 +12,7 @@ import '../providers/location_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../services/foreground_service.dart';
+import '../services/emergency_call_service.dart';
 import '../utils/app_colors.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
@@ -192,11 +193,10 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   }
 
   Widget _buildReceiverStatusCard() {
-    final victimPos = _locationProvider?.currentPosition;
-    if (victimPos == null) return const SizedBox.shrink();
-
     final activeReceivers = _receiverLinks.where((l) => l.linkOpened).toList();
     if (activeReceivers.isEmpty) return const SizedBox.shrink();
+
+    final victimPos = _locationProvider?.currentPosition;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -229,7 +229,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
             String distanceText = 'Location pending';
             double? etaMinutes;
 
-            if (link.hasLocation) {
+            if (link.hasLocation && victimPos != null) {
               final distance = Geolocator.distanceBetween(
                 victimPos.latitude,
                 victimPos.longitude,
@@ -273,6 +273,25 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  if (link.contactPhone.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => EmergencyCallService.dialNumber(context, link.contactPhone),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.call,
+                          size: 16,
+                          color: AppColors.success,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
