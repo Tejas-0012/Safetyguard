@@ -92,11 +92,20 @@ async function fetchEmergencyData() {
 
         emergency = data.emergency;
         receiver = data.receiver;
-           if (!isLiveKitConnected && emergency && emergency.id) {
+        if (!isLiveKitConnected && emergency && emergency.id && emergency.status === 'active') {
             isLiveKitConnected = true;
             connectLiveKitVideo(emergency.id);
         }
         renderUI();
+
+        // If emergency is stopped, clear polling interval
+        if (emergency && emergency.status !== 'active') {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+                console.log("🛑 Emergency is resolved/stopped. Polling paused.");
+            }
+        }
 
     } catch (error) {
         console.error('Error fetching:', error);
@@ -177,9 +186,25 @@ function renderUI() {
     }
 
 
-    // Status
+    // Duration
+    const startMs = new Date(emergency.startTime).getTime();
+    const endMs = (emergency.status !== 'active' && emergency.endTime) 
+        ? new Date(emergency.endTime).getTime() 
+        : Date.now();
+    const diffSec = Math.max(0, Math.floor((endMs - startMs) / 1000));
+    const mins = Math.floor(diffSec / 60).toString().padStart(2, '0');
+    const secs = (diffSec % 60).toString().padStart(2, '0');
+    const durationValue = document.getElementById('durationValue');
+    if (durationValue) durationValue.textContent = `${mins}:${secs}`;
+
+    // Status & Banner
     const statusValue = document.getElementById('statusValue');
     const statusBadge = document.getElementById('statusBadge');
+    const stoppedBanner = document.getElementById('stoppedBanner');
+    const stoppedTitle = document.getElementById('stoppedBannerTitle');
+    const stoppedSubtitle = document.getElementById('stoppedBannerSubtitle');
+    const videoContainer = document.getElementById('videoContainer');
+
     const triggerLabels = {
         'button': '👆 App Button',
         'shake': '📳 Shake',
@@ -188,19 +213,36 @@ function renderUI() {
         'widget': '📱 Home Widget'
     };
     const triggerText = triggerLabels[emergency.triggerSource] || 'Manual';
+
     if (emergency.status === 'active') {
+        if (stoppedBanner) stoppedBanner.style.display = 'none';
         if (statusValue) {
             statusValue.textContent = triggerText;
             statusValue.style.color = '#ff1744';
             statusValue.style.fontSize = '16px';
         }
-        if (statusBadge) statusBadge.textContent = '● ACTIVE';
-    } else {
-        if (statusValue) {
-            statusValue.textContent = '✅ Resolved';
-            statusValue.style.color = '#00c853';
+        if (statusBadge) {
+            statusBadge.textContent = '● ACTIVE';
+            statusBadge.className = 'status active';
+            statusBadge.style.background = '#e53935';
         }
-        if (statusBadge) statusBadge.textContent = '● RESOLVED';
+    } else {
+        const stopTimeStr = formatIST(emergency.endTime || emergency.updatedAt || Date.now());
+        if (stoppedBanner) {
+            stoppedBanner.style.display = 'block';
+            if (stoppedTitle) stoppedTitle.textContent = `🛑 EMERGENCY STOPPED (${stopTimeStr})`;
+            if (stoppedSubtitle) stoppedSubtitle.textContent = `Victim stopped the alert at ${stopTimeStr}. Map displays the final last known location. All recorded media & photos are preserved below.`;
+        }
+        if (statusValue) {
+            statusValue.innerHTML = `<span style="color:#c62828; font-weight:800;">🛑 Stopped</span><br><span style="font-size:12px;color:#555;font-weight:600;">at ${stopTimeStr}</span>`;
+            statusValue.style.fontSize = '15px';
+        }
+        if (statusBadge) {
+            statusBadge.textContent = `🛑 STOPPED (${stopTimeStr})`;
+            statusBadge.className = 'status resolved';
+            statusBadge.style.background = '#455a64';
+        }
+        if (videoContainer) videoContainer.style.display = 'none';
     }
 }
 
@@ -208,15 +250,25 @@ function renderUI() {
 // Map
 // ============================================
 
-function updateMap() {
-    if (!emergency.currentLocation) return;
+let locationPathLine = null;
 
-    const loc = emergency.currentLocation;
+function updateMap() {
+    let loc = emergency.currentLocation;
+    if ((!loc || (loc.latitude === 0 && loc.longitude === 0)) && emergency.locationPoints?.length > 0) {
+        const lp = emergency.locationPoints[emergency.locationPoints.length - 1];
+        loc = { latitude: lp.latitude, longitude: lp.longitude };
+    }
+    if (!loc || (loc.latitude === 0 && loc.longitude === 0)) return;
+
     const pos = { lat: loc.latitude, lng: loc.longitude };
+    const stopTimeStr = formatIST(emergency.endTime || emergency.updatedAt);
+    const markerTitle = emergency.status !== 'active'
+        ? `Last Known Location (Emergency Stopped at ${stopTimeStr})`
+        : `${emergency.userName || 'Victim'}'s Live Location`;
 
     if (!map) {
         map = new google.maps.Map(document.getElementById('map'), {
-            zoom: 15,
+            zoom: 16,
             center: pos,
             mapTypeId: google.maps.MapTypeId.roadmap,
             styles: [
@@ -227,10 +279,10 @@ function updateMap() {
         marker = new google.maps.Marker({
             position: pos,
             map: map,
-            title: 'Sender Location',
+            title: markerTitle,
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
-                fillColor: '#ff1744',
+                fillColor: emergency.status === 'active' ? '#ff1744' : '#d32f2f',
                 fillOpacity: 1,
                 strokeColor: '#ffffff',
                 strokeWeight: 3,
@@ -239,7 +291,38 @@ function updateMap() {
         });
     } else {
         marker.setPosition(pos);
+        marker.setTitle(markerTitle);
+        marker.setIcon({
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: emergency.status === 'active' ? '#ff1744' : '#d32f2f',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+            scale: 10,
+        });
         map.panTo(pos);
+    }
+
+    // Polyline of victim route
+    if (emergency.locationPoints && emergency.locationPoints.length > 1) {
+        const pathCoords = emergency.locationPoints
+            .filter(p => p.latitude !== 0 && p.longitude !== 0)
+            .map(p => ({ lat: p.latitude, lng: p.longitude }));
+
+        if (pathCoords.length > 1) {
+            if (!locationPathLine) {
+                locationPathLine = new google.maps.Polyline({
+                    path: pathCoords,
+                    geodesic: true,
+                    strokeColor: '#e53935',
+                    strokeOpacity: 0.8,
+                    strokeWeight: 4,
+                    map: map
+                });
+            } else {
+                locationPathLine.setPath(pathCoords);
+            }
+        }
     }
 
     // ✅ Show other receivers on the map (Phase 3 preview)
@@ -278,7 +361,7 @@ let lastAudioCount = -1;
 function renderAudioChunkItem(audio, index) {
     const chunkNum = audio.chunkIndex ?? (index + 1);
     const dur = audio.durationSeconds ?? 30;
-    const time = audio.recordedAt ? new Date(audio.recordedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+    const time = audio.recordedAt ? formatIST(audio.recordedAt) : '';
     return `
         <div class="audio-chunk">
             <div class="audio-chunk-header">
@@ -419,15 +502,7 @@ function renderImageCard(img, index) {
             ? '📷 Back'
             : '📷 Photo';
     
-    const d = new Date(img.capturedAt);
-    const time = d.toLocaleTimeString('en-IN', {
-        timeZone: 'UTC',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-    });
-
+    const time = formatIST(img.capturedAt);
     const captionEscaped = `${label} • ${time}`;
 
     return `

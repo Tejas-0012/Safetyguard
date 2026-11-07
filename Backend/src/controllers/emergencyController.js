@@ -515,13 +515,6 @@ exports.getReceiverByToken = async (req, res) => {
       });
     }
 
-    if (emergency.status !== 'active') {
-      return res.status(400).json({
-        success: false,
-        message: 'Emergency has ended',
-      });
-    }
-
     // Find this specific receiver's link data
     const link = emergency.receiverLinks.find((l) => l.token === token);
     if (!link) {
@@ -551,6 +544,7 @@ exports.getReceiverByToken = async (req, res) => {
         userName: emergency.userId ? emergency.userId.name : 'Unknown',
         userPhone: emergency.userId ? emergency.userId.phone : '',
         startTime: emergency.startTime,
+        endTime: emergency.endTime,
         status: emergency.status,
         currentLocation: emergency.currentLocation,
         locationPoints: emergency.locationPoints.slice(-30),
@@ -908,13 +902,6 @@ exports.getEmergencyByToken = async (req, res) => {
       });
     }
 
-    if (emergency.status !== 'active') {
-      return res.status(400).json({
-        success: false,
-        message: 'Emergency has ended'
-      });
-    }
-
     res.status(200).json({
       success: true,
       emergency: {
@@ -922,6 +909,7 @@ exports.getEmergencyByToken = async (req, res) => {
         userName: emergency.userId ? emergency.userId.name : 'Unknown',
         userPhone: emergency.userId ? emergency.userId.phone : 'No phone',
         startTime: emergency.startTime,
+        endTime: emergency.endTime,
         status: emergency.status,
         currentLocation: emergency.currentLocation,
         locationPoints: emergency.locationPoints.slice(-30),
