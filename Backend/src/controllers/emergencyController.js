@@ -1214,7 +1214,8 @@ exports.uploadReceiverVideo = async (req, res) => {
     }
 
     const fileName = req.file.filename;
-    const publicUrl = `${process.env.FRONTEND_URL || ''}/uploads/videos/${fileName}`;
+    const baseUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    const publicUrl = baseUrl ? `${baseUrl}/uploads/videos/${fileName}` : `/uploads/videos/${fileName}`;
 
     const video = {
       url: publicUrl,
@@ -1279,7 +1280,8 @@ exports.uploadEmergencyVideo = async (req, res) => {
     }
 
     const fileName = req.file.filename;
-    const publicUrl = `${process.env.FRONTEND_URL || ''}/uploads/videos/${fileName}`;
+    const baseUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    const publicUrl = baseUrl ? `${baseUrl}/uploads/videos/${fileName}` : `/uploads/videos/${fileName}`;
 
     const video = {
       url: publicUrl,

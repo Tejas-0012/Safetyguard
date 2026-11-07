@@ -664,10 +664,10 @@ async function connectLiveKitVideo(emergencyId) {
                 if (videoEl) {
                     track.attach(videoEl);
                     videoEl.play().then(() => {
-                        startStreamRecording();
+                        ensureStreamReadyAndRecord();
                     }).catch(e => console.log("Video play pending interaction:", e));
                     videoEl.onloadedmetadata = () => {
-                        startStreamRecording();
+                        ensureStreamReadyAndRecord();
                     };
                 }
 
@@ -834,18 +834,19 @@ window.addEventListener('beforeunload', () => {
 let mediaStreamRecorder = null;
 let recordedVideoChunks = [];
 let isRecordingLiveStream = false;
+let isRecordingFinalized = false;
 let recordedVideoBlob = null;
 let recordedVideoUrl = null;
 let hasUploadedStream = false;
 
 let compositorCanvas = null;
 let compositorCtx = null;
-let compositorAnimId = null;
+let compositorInterval = null;
 let streamRecordingTimer = null;
 let recordingStartTimestamp = null;
 let recordingElapsedInterval = null;
 
-const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000; // 10 minutes maximum cutoff
+const MAX_RECORDING_DURATION_MS = 10 * 60 * 1000; // 10 minutes cutoff
 
 function initCompositor() {
     if (!compositorCanvas) {
@@ -858,30 +859,44 @@ function initCompositor() {
 
 function startCompositorLoop() {
     initCompositor();
-    if (compositorAnimId) cancelAnimationFrame(compositorAnimId);
+    if (compositorInterval) clearInterval(compositorInterval);
 
-    function drawFrame() {
+    // Keep continuous 30fps draw tick even if tab is in background
+    compositorInterval = setInterval(() => {
         if (!isRecordingLiveStream) return;
         const video = document.getElementById('liveVideoPlayer');
-        if (video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-            if (compositorCanvas.width !== video.videoWidth) {
-                compositorCanvas.width = video.videoWidth;
-                compositorCanvas.height = video.videoHeight;
-            }
+        if (video && video.readyState >= 2 && video.videoWidth > 0) {
             try {
-                compositorCtx.drawImage(video, 0, 0, compositorCanvas.width, compositorCanvas.height);
+                compositorCtx.drawImage(video, 0, 0, 1280, 720);
             } catch (err) {
-                // Ignore transient frame draw error during camera switch
+                // Ignore transient draw error during camera switch
             }
         }
-        compositorAnimId = requestAnimationFrame(drawFrame);
-    }
+    }, 33);
+}
 
-    compositorAnimId = requestAnimationFrame(drawFrame);
+function ensureStreamReadyAndRecord() {
+    if (isRecordingLiveStream || isRecordingFinalized) return;
+    if (emergency && emergency.status !== 'active') return;
+
+    const video = document.getElementById('liveVideoPlayer');
+    if (!video) return;
+
+    if (video.videoWidth > 0 && video.readyState >= 2) {
+        startStreamRecording();
+    } else {
+        const onReady = () => {
+            video.removeEventListener('playing', onReady);
+            video.removeEventListener('loadeddata', onReady);
+            setTimeout(startStreamRecording, 600);
+        };
+        video.addEventListener('playing', onReady);
+        video.addEventListener('loadeddata', onReady);
+    }
 }
 
 function startStreamRecording() {
-    if (isRecordingLiveStream) return;
+    if (isRecordingLiveStream || isRecordingFinalized) return;
     if (emergency && emergency.status !== 'active') return;
 
     const video = document.getElementById('liveVideoPlayer');
@@ -891,7 +906,7 @@ function startStreamRecording() {
         startCompositorLoop();
         const canvasStream = compositorCanvas.captureStream(30);
 
-        // Mix audio track from liveAudioPlayer
+        // Mix live audio track
         const audio = document.getElementById('liveAudioPlayer');
         if (audio && audio.srcObject) {
             const audioTracks = audio.srcObject.getAudioTracks();
@@ -924,10 +939,10 @@ function startStreamRecording() {
         };
 
         mediaStreamRecorder.onstop = () => {
-            console.log("🎥 Live stream recording stopped. Assembling full clean video, chunk count:", recordedVideoChunks.length);
-            if (compositorAnimId) {
-                cancelAnimationFrame(compositorAnimId);
-                compositorAnimId = null;
+            console.log("🎥 Live stream recording stopped. Total chunks collected:", recordedVideoChunks.length);
+            if (compositorInterval) {
+                clearInterval(compositorInterval);
+                compositorInterval = null;
             }
             if (recordingElapsedInterval) {
                 clearInterval(recordingElapsedInterval);
@@ -939,21 +954,24 @@ function startStreamRecording() {
             }
 
             if (recordedVideoChunks.length > 0) {
+                const totalDur = recordingStartTimestamp ? Math.round((Date.now() - recordingStartTimestamp) / 1000) : 0;
                 recordedVideoBlob = new Blob(recordedVideoChunks, { type: mimeType });
                 recordedVideoUrl = URL.createObjectURL(recordedVideoBlob);
-                console.log(`✅ Compiled recorded stream video (${(recordedVideoBlob.size / 1024 / 1024).toFixed(2)} MB)`);
+                isRecordingFinalized = true;
+
+                console.log(`✅ Compiled recorded stream video (${(recordedVideoBlob.size / 1024 / 1024).toFixed(2)} MB, ${totalDur}s)`);
                 updateVideoUI();
-                uploadRecordedStream(recordedVideoBlob);
+                uploadRecordedStream(recordedVideoBlob, totalDur);
             }
         };
 
-        // Record continuously without chunk slicing to preserve clean container seek index
-        mediaStreamRecorder.start();
+        // Record with 1s timeslices so chunks continuously flush
+        mediaStreamRecorder.start(1000);
         isRecordingLiveStream = true;
         recordingStartTimestamp = Date.now();
-        console.log("🎥 Live stream compositor recording started with mime:", mimeType);
+        console.log("🎥 Live stream recording started (MIME: " + mimeType + "). Cutoff: 10 min or on Stop Emergency.");
 
-        // Update timer badge in Media Hub
+        // Update UI
         updateVideoUI();
         if (recordingElapsedInterval) clearInterval(recordingElapsedInterval);
         recordingElapsedInterval = setInterval(() => {
@@ -970,7 +988,7 @@ function startStreamRecording() {
             }
         }, 1000);
 
-        // 10-Minute Maximum Cutoff Timer
+        // 10-Minute Cutoff Timer
         if (streamRecordingTimer) clearTimeout(streamRecordingTimer);
         streamRecordingTimer = setTimeout(() => {
             console.log("⏱️ 10 minutes reached! Finalizing stream recording...");
@@ -1005,7 +1023,7 @@ function stopStreamRecording(reason) {
     isRecordingLiveStream = false;
 }
 
-async function uploadRecordedStream(blob) {
+async function uploadRecordedStream(blob, durationSec) {
     if (hasUploadedStream || !token) return;
     hasUploadedStream = true;
 
@@ -1013,6 +1031,7 @@ async function uploadRecordedStream(blob) {
         const formData = new FormData();
         const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
         formData.append('video', blob, `stream_recording_${Date.now()}.${ext}`);
+        formData.append('durationSeconds', (durationSec || 0).toString());
         formData.append('recordedAt', new Date().toISOString());
 
         console.log("📤 Uploading recorded stream to backend...");
@@ -1038,13 +1057,17 @@ function updateVideoUI() {
     if (!videoContent) return;
 
     const savedVideos = emergency?.videoRecordings || [];
-    const activeVideoUrl = savedVideos.length > 0 ? savedVideos[savedVideos.length - 1].url : recordedVideoUrl;
+    const hasCompletedRecording = Boolean(savedVideos.length > 0 || (isRecordingFinalized && recordedVideoUrl));
+    const activeVideoUrl = savedVideos.length > 0 
+        ? savedVideos[savedVideos.length - 1].url 
+        : (isRecordingFinalized ? recordedVideoUrl : null);
 
     if (modalVideoCount) {
-        modalVideoCount.textContent = savedVideos.length > 0 ? savedVideos.length : (recordedVideoUrl ? 1 : 0);
+        modalVideoCount.textContent = hasCompletedRecording ? Math.max(savedVideos.length, 1) : 0;
     }
 
-    if (activeVideoUrl) {
+    // 1. If recording has finalized (after 10 min or on Stop Emergency) OR already saved on server:
+    if (hasCompletedRecording && activeVideoUrl) {
         const ext = activeVideoUrl.endsWith('.mp4') ? 'mp4' : 'webm';
         videoContent.innerHTML = `
             <div style="background:#000; border-radius:14px; overflow:hidden; margin-bottom:12px; box-shadow:0 4px 14px rgba(0,0,0,0.2);">
@@ -1053,14 +1076,16 @@ function updateVideoUI() {
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding: 4px 0;">
                 <div>
                     <span style="font-weight:700; color:#1a237e; font-size:14px;">🎥 Live Stream Full Recording</span>
-                    <div style="font-size:12px; color:#666;">Finalized after 10 min or on Stop Emergency</div>
+                    <div style="font-size:12px; color:#666;">Generated after 10 min or on Stop Emergency</div>
                 </div>
                 <a href="${activeVideoUrl}" download="emergency_recording_${Date.now()}.${ext}" class="btn-download-primary">
                     ⬇ Download Video
                 </a>
             </div>
         `;
-    } else if (isRecordingLiveStream && emergency?.status === 'active') {
+    } 
+    // 2. If emergency is active and recording is in progress (under 10 minutes):
+    else if (emergency?.status === 'active') {
         const elapsedSec = recordingStartTimestamp ? Math.floor((Date.now() - recordingStartTimestamp) / 1000) : 0;
         const mins = Math.floor(elapsedSec / 60).toString().padStart(2, '0');
         const secs = (elapsedSec % 60).toString().padStart(2, '0');
@@ -1077,7 +1102,9 @@ function updateVideoUI() {
                 </div>
             </div>
         `;
-    } else {
+    } 
+    // 3. If emergency has concluded and no video was recorded:
+    else {
         videoContent.innerHTML = `
             <div style="text-align:center; padding: 36px 14px; color: #777;">
                 <span style="font-size: 38px;">🎥</span>
