@@ -558,6 +558,7 @@ exports.getReceiverByToken = async (req, res) => {
         isVideoActive: emergency.isVideoActive,
         receiverReplies: emergency.receiverReplies || [],
         audioRecordings: emergency.audioRecordings || [],
+        videoRecordings: emergency.videoRecordings || [],
         triggerSource: emergency.triggerSource,
         // ✅ Show all receivers' locations to the receiver too (optional)
         otherReceivers: emergency.receiverLinks
@@ -927,6 +928,7 @@ exports.getEmergencyByToken = async (req, res) => {
         cameraImages: emergency.cameraImages,
         isVideoActive: emergency.isVideoActive,
         audioRecordings: emergency.audioRecordings || [],
+        videoRecordings: emergency.videoRecordings || [],
         receiverReplies: emergency.receiverReplies || [],
         triggerSource: emergency.triggerSource,
       }
@@ -1192,5 +1194,134 @@ async function sendEmergencyNotification({
     // Don't throw - just log the error
     return false;
   }
-}
+};
+
+// ============ 🎥 UPLOAD RECEIVER STREAM RECORDING ============
+// @desc    Upload recorded stream from receiver web page
+// @route   POST /api/emergency/receiver/:token/video
+// @access  Public (via token)
+exports.uploadReceiverVideo = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No video file uploaded',
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      'receiverLinks.token': token,
+    });
+
+    if (!emergency) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found for this token',
+      });
+    }
+
+    const fileName = req.file.filename;
+    const publicUrl = `${process.env.FRONTEND_URL || ''}/uploads/videos/${fileName}`;
+
+    const video = {
+      url: publicUrl,
+      durationSeconds: parseInt(req.body.durationSeconds) || 0,
+      recordedAt: req.body.recordedAt ? new Date(req.body.recordedAt) : new Date(),
+      sizeBytes: req.file.size,
+    };
+
+    if (!emergency.videoRecordings) {
+      emergency.videoRecordings = [];
+    }
+
+    emergency.videoRecordings.push(video);
+    await emergency.save();
+
+    console.log(`🎥 Recorded stream video uploaded via receiver: ${fileName} (${req.file.size} bytes)`);
+
+    res.status(200).json({
+      success: true,
+      video: video,
+    });
+  } catch (error) {
+    console.error('Upload receiver video error:', error);
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ============ 🎥 UPLOAD EMERGENCY VIDEO (Sender side) ============
+// @desc    Upload recorded video from sender device
+// @route   POST /api/emergency/:id/video
+// @access  Private
+exports.uploadEmergencyVideo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No video file uploaded',
+      });
+    }
+
+    const emergency = await Emergency.findOne({
+      _id: id,
+      userId: req.user.id,
+    });
+
+    if (!emergency) {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'Emergency not found',
+      });
+    }
+
+    const fileName = req.file.filename;
+    const publicUrl = `${process.env.FRONTEND_URL || ''}/uploads/videos/${fileName}`;
+
+    const video = {
+      url: publicUrl,
+      durationSeconds: parseInt(req.body.durationSeconds) || 0,
+      recordedAt: req.body.recordedAt ? new Date(req.body.recordedAt) : new Date(),
+      sizeBytes: req.file.size,
+    };
+
+    if (!emergency.videoRecordings) {
+      emergency.videoRecordings = [];
+    }
+
+    emergency.videoRecordings.push(video);
+    await emergency.save();
+
+    console.log(`🎥 Emergency video uploaded: ${fileName} (${req.file.size} bytes)`);
+
+    res.status(200).json({
+      success: true,
+      video: video,
+    });
+  } catch (error) {
+    console.error('Upload emergency video error:', error);
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 

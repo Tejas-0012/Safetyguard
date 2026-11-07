@@ -145,19 +145,36 @@ function renderUI() {
     const updateCount = document.getElementById('updateCount');
     if (updateCount) updateCount.textContent = emergency.locationPoints?.length || 0;
 
-    const imageCount = document.getElementById('imageCount');
-    if (imageCount) imageCount.textContent = emergency.cameraImages?.length || 0;
+    const mediaCount = document.getElementById('mediaCount');
+    const totalMedia = (emergency.cameraImages?.length || 0) + 
+                       (emergency.audioRecordings?.length || 0) + 
+                       ((emergency.videoRecordings?.length || 0) || (recordedVideoUrl ? 1 : 0));
+    if (mediaCount) mediaCount.textContent = totalMedia;
 
     // Map
     updateMap();
 
     // Images
     updateImages();
-        // Audio
-updateAudio();
+    // Audio
+    updateAudio();
+    // Recorded Video
+    updateVideoUI();
 
     // Replies
     updateReplies();
+
+    // Handle emergency conclusion (Stop live location & finalize recording)
+    if (emergency.status !== 'active') {
+        stopStreamRecording();
+        if (isSharingLocation) {
+            stopSharingLocation();
+        }
+        if (locationWatchId !== null) {
+            navigator.geolocation.clearWatch(locationWatchId);
+            locationWatchId = null;
+        }
+    }
 
 
     // Status
@@ -253,10 +270,33 @@ function updateMap() {
 }
 
 // ============================================
-// Audio Recordings
+// Audio Recordings (Preview max 5, Show More opens Media Hub)
 // ============================================
 
-let lastAudioCount = 0;
+let lastAudioCount = -1;
+
+function renderAudioChunkItem(audio, index) {
+    const chunkNum = audio.chunkIndex ?? (index + 1);
+    const dur = audio.durationSeconds ?? 30;
+    const time = audio.recordedAt ? new Date(audio.recordedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+    return `
+        <div class="audio-chunk">
+            <div class="audio-chunk-header">
+                <span>🎵 Chunk #${chunkNum} ${time ? '• ' + time : ''}</span>
+                <span>${dur}s</span>
+            </div>
+            <audio controls preload="none">
+                <source src="${audio.url}" type="audio/mp4">
+                Your browser does not support audio playback.
+            </audio>
+            <div style="text-align: right;">
+                <a href="${audio.url}" download="audio_chunk_${chunkNum}.m4a" style="font-size: 11px; color: #1a237e; text-decoration: none; font-weight: 600;">
+                    ⬇ Download Audio
+                </a>
+            </div>
+        </div>
+    `;
+}
 
 function updateAudio() {
     const audios = emergency.audioRecordings || [];
@@ -267,21 +307,37 @@ function updateAudio() {
 
     const container = document.getElementById('audioContainer');
     const list = document.getElementById('audioList');
+    const showMoreContainer = document.getElementById('audioShowMoreContainer');
+    const modalList = document.getElementById('modalAudioContent');
+    const modalCount = document.getElementById('modalAudioCount');
+
+    if (modalCount) modalCount.textContent = audioCount;
 
     if (audioCount > 0 && container && list) {
         container.style.display = 'block';
-        list.innerHTML = audios.map((audio, index) => `
-            <div class="audio-chunk">
-                <div class="audio-chunk-header">
-                    <span>🎵 Chunk ${audio.chunkIndex ?? index + 1}</span>
-                    <span>${audio.durationSeconds ?? 30}s</span>
-                </div>
-                <audio controls preload="none">
-                    <source src="${audio.url}" type="audio/mp4">
-                    Your browser does not support audio playback.
-                </audio>
-            </div>
-        `).join('');
+        
+        // Show max 5 on main page preview
+        const previewAudios = audios.slice(0, 5);
+        list.innerHTML = previewAudios.map((a, i) => renderAudioChunkItem(a, i)).join('');
+
+        if (showMoreContainer) {
+            if (audioCount > 5) {
+                showMoreContainer.innerHTML = `
+                    <button class="show-more-btn" onclick="openMediaSection('audio')">
+                        📂 Show More Audio (${audioCount} total) ↗
+                    </button>
+                `;
+            } else {
+                showMoreContainer.innerHTML = '';
+            }
+        }
+
+        // Render ALL in modal
+        if (modalList) {
+            modalList.innerHTML = audios.map((a, i) => renderAudioChunkItem(a, i)).join('');
+        }
+    } else if (modalList) {
+        modalList.innerHTML = '<p style="text-align:center; color:#888; padding:20px;">No audio recordings yet.</p>';
     }
 }
 
@@ -351,10 +407,49 @@ async function stopSharingLocation() {
 }
 
 // ============================================
-// Images
+// Camera Images (Preview max 6 with View & Download, Show More opens Media Hub)
 // ============================================
 
-let lastImageCount = 0;
+let lastImageCount = -1;
+
+function renderImageCard(img, index) {
+    const label = img.camera === 'front'
+        ? '🤳 Front'
+        : img.camera === 'back'
+            ? '📷 Back'
+            : '📷 Photo';
+    
+    const d = new Date(img.capturedAt);
+    const time = d.toLocaleTimeString('en-IN', {
+        timeZone: 'UTC',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+    });
+
+    const captionEscaped = `${label} • ${time}`;
+
+    return `
+        <div class="img-card-wrapper">
+            <img src="${img.url}" 
+                 alt="Evidence Photo" 
+                 style="width:100%;height:135px;object-fit:cover;border-radius:10px;cursor:pointer;"
+                 onclick="openLightbox('${img.url}', '${captionEscaped}')">
+            <div style="font-size:11px;color:#666;text-align:center;font-weight:500;">
+                ${captionEscaped}
+            </div>
+            <div class="img-action-bar">
+                <button class="btn-img-action view" onclick="openLightbox('${img.url}', '${captionEscaped}')">
+                    🔍 View
+                </button>
+                <a class="btn-img-action download" href="${img.url}" download="evidence_${index + 1}.jpg" target="_blank">
+                    ⬇ Save
+                </a>
+            </div>
+        </div>
+    `;
+}
 
 function updateImages() {
     const imgs = emergency.cameraImages || [];
@@ -365,38 +460,39 @@ function updateImages() {
 
     const container = document.getElementById('imagesContainer');
     const grid = document.getElementById('imageGrid');
+    const showMoreContainer = document.getElementById('imagesShowMoreContainer');
+    const modalGrid = document.getElementById('modalImagesContent');
+    const modalCount = document.getElementById('modalImagesCount');
+
+    if (modalCount) modalCount.textContent = imageCount;
 
     if (imageCount > 0 && container && grid) {
         container.style.display = 'block';
-        grid.innerHTML = imgs
-            .slice()
-            .reverse()
-            .map((img) => {
-                const label = img.camera === 'front'
-                    ? '🤳 Front'
-                    : img.camera === 'back'
-                        ? '📷 Back'
-                        : '📷 Photo';
-                
-                const d = new Date(img.capturedAt);
-const time = d.toLocaleTimeString('en-IN', {
-    timeZone: 'UTC',    // ← read the digits without adding +5:30
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-});
 
-                return `
-                    <div style="display:flex;flex-direction:column;gap:4px;">
-                        <img src="${img.url}" style="width:100%;height:150px;object-fit:cover;border-radius:12px;border:1px solid #eee;">
-                        <div style="font-size:11px;color:#666;text-align:center;">
-                            ${label} • ${time}
-                        </div>
-                    </div>
+        const reversedImgs = imgs.slice().reverse();
+
+        // Main preview: show up to 6
+        const previewImgs = reversedImgs.slice(0, 6);
+        grid.innerHTML = previewImgs.map((img, idx) => renderImageCard(img, idx)).join('');
+
+        if (showMoreContainer) {
+            if (imageCount > 6) {
+                showMoreContainer.innerHTML = `
+                    <button class="show-more-btn" onclick="openMediaSection('images')">
+                        📂 Show More Images (${imageCount} total) ↗
+                    </button>
                 `;
-            })
-            .join('');
+            } else {
+                showMoreContainer.innerHTML = '';
+            }
+        }
+
+        // Render ALL in modal
+        if (modalGrid) {
+            modalGrid.innerHTML = reversedImgs.map((img, idx) => renderImageCard(img, idx)).join('');
+        }
+    } else if (modalGrid) {
+        modalGrid.innerHTML = '<p style="text-align:center; color:#888; padding:20px; grid-column:span 2;">No camera images captured yet.</p>';
     }
 }
 
@@ -492,7 +588,7 @@ async function connectLiveKitVideo(emergencyId) {
                 const videoEl = document.getElementById('liveVideoPlayer');
                 if (videoEl) {
                     track.attach(videoEl);
-                    videoEl.play().catch(e => console.log("Video play pending interaction:", e));
+                    videoEl.play().then(() => { startStreamRecording(); }).catch(e => console.log("Video play pending interaction:", e));
                 }
 
                 const container = document.getElementById('videoContainer');
@@ -650,4 +746,221 @@ document.getElementById('shareLocationBtn')?.addEventListener('click', () => {
 window.addEventListener('beforeunload', () => {
     if (updateInterval) clearInterval(updateInterval);
     if (locationWatchId) navigator.geolocation.clearWatch(locationWatchId);
+});
+// ============================================
+// Live Stream Recording & Media Hub Management
+// ============================================
+
+let mediaStreamRecorder = null;
+let recordedVideoChunks = [];
+let isRecordingLiveStream = false;
+let recordedVideoBlob = null;
+let recordedVideoUrl = null;
+let hasUploadedStream = false;
+
+function startStreamRecording() {
+    if (isRecordingLiveStream) return;
+    const video = document.getElementById('liveVideoPlayer');
+    if (!video) return;
+
+    try {
+        let stream = null;
+        if (typeof video.captureStream === 'function') {
+            stream = video.captureStream();
+        } else if (typeof video.mozCaptureStream === 'function') {
+            stream = video.mozCaptureStream();
+        }
+
+        if (!stream) {
+            console.log("captureStream not supported in this browser");
+            return;
+        }
+
+        // Add audio track if available from live audio
+        const audio = document.getElementById('liveAudioPlayer');
+        if (audio && audio.srcObject) {
+            const audioTracks = audio.srcObject.getAudioTracks();
+            if (audioTracks.length > 0 && stream.getAudioTracks().length === 0) {
+                stream.addTrack(audioTracks[0]);
+            }
+        }
+
+        let mimeType = 'video/webm;codecs=vp8,opus';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+        }
+
+        recordedVideoChunks = [];
+        mediaStreamRecorder = new MediaRecorder(stream, { mimeType });
+
+        mediaStreamRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+                recordedVideoChunks.push(e.data);
+            }
+        };
+
+        mediaStreamRecorder.onstop = () => {
+            console.log("🎥 Live stream recording finished, size:", recordedVideoChunks.length);
+            if (recordedVideoChunks.length > 0) {
+                recordedVideoBlob = new Blob(recordedVideoChunks, { type: mimeType });
+                recordedVideoUrl = URL.createObjectURL(recordedVideoBlob);
+                updateVideoUI();
+                uploadRecordedStream(recordedVideoBlob);
+            }
+        };
+
+        mediaStreamRecorder.start(2000);
+        isRecordingLiveStream = true;
+        console.log("🎥 Live stream auto-recording started with mime:", mimeType);
+    } catch (e) {
+        console.warn("Could not start live stream recorder:", e);
+    }
+}
+
+function stopStreamRecording() {
+    if (mediaStreamRecorder && mediaStreamRecorder.state !== 'inactive') {
+        try {
+            mediaStreamRecorder.stop();
+        } catch (e) {
+            console.warn("Error stopping MediaRecorder:", e);
+        }
+    }
+    isRecordingLiveStream = false;
+}
+
+async function uploadRecordedStream(blob) {
+    if (hasUploadedStream || !token) return;
+    hasUploadedStream = true;
+
+    try {
+        const formData = new FormData();
+        const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+        formData.append('video', blob, `stream_recording_${Date.now()}.${ext}`);
+        formData.append('recordedAt', new Date().toISOString());
+
+        console.log("📤 Uploading recorded stream to backend...");
+        const res = await fetch(`/api/emergency/receiver/${token}/video`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await res.json();
+        if (data.success && data.video) {
+            console.log("✅ Stream recording permanently archived:", data.video.url);
+            if (!emergency.videoRecordings) emergency.videoRecordings = [];
+            emergency.videoRecordings.push(data.video);
+            updateVideoUI();
+        }
+    } catch (err) {
+        console.error("Failed to upload recorded stream:", err);
+    }
+}
+
+function updateVideoUI() {
+    const videoContent = document.getElementById('modalVideoContent');
+    const modalVideoCount = document.getElementById('modalVideoCount');
+    if (!videoContent) return;
+
+    const savedVideos = emergency?.videoRecordings || [];
+    const activeVideoUrl = savedVideos.length > 0 ? savedVideos[savedVideos.length - 1].url : recordedVideoUrl;
+
+    if (modalVideoCount) {
+        modalVideoCount.textContent = savedVideos.length > 0 ? savedVideos.length : (recordedVideoUrl ? 1 : 0);
+    }
+
+    if (activeVideoUrl) {
+        videoContent.innerHTML = `
+            <div style="background:#000; border-radius:14px; overflow:hidden; margin-bottom:12px; box-shadow:0 4px 14px rgba(0,0,0,0.2);">
+                <video src="${activeVideoUrl}" controls playsinline style="width:100%; max-height:360px; object-fit:contain; background:#000;"></video>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div>
+                    <span style="font-weight:700; color:#1a237e; font-size:14px;">🎥 Live Stream Full Recording</span>
+                    <div style="font-size:12px; color:#666;">Ended when emergency was stopped</div>
+                </div>
+                <a href="${activeVideoUrl}" download="stream_recording.webm" class="btn-download-primary">
+                    ⬇ Download Video
+                </a>
+            </div>
+        `;
+    } else if (isRecordingLiveStream) {
+        videoContent.innerHTML = `
+            <div style="text-align:center; padding: 36px 14px; color: #555;">
+                <span style="font-size: 38px; animation: pulse 1.5s infinite; display: inline-block;">🔴</span>
+                <h4 style="margin: 12px 0 6px; font-size: 16px; color: #e53935;">Live Stream is Actively Recording</h4>
+                <p style="font-size: 13px; color: #777;">The complete video will finalize and appear here automatically when the emergency is stopped.</p>
+            </div>
+        `;
+    } else {
+        videoContent.innerHTML = `
+            <div style="text-align:center; padding: 36px 14px; color: #777;">
+                <span style="font-size: 38px;">🎥</span>
+                <h4 style="margin: 12px 0 6px; font-size: 15px;">No Stream Recording Available</h4>
+                <p style="font-size: 13px;">Recordings are created automatically during active video streams.</p>
+            </div>
+        `;
+    }
+}
+
+// ============================================
+// Media Modal & Tab Switching
+// ============================================
+
+function openMediaSection(tab) {
+    const modal = document.getElementById('mediaModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        switchMediaTab(tab || 'video');
+    }
+}
+
+function closeMediaSection() {
+    const modal = document.getElementById('mediaModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function switchMediaTab(tab) {
+    const tabs = ['video', 'audio', 'images'];
+    tabs.forEach(t => {
+        const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+        const pane = document.getElementById('modalPane' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (btn) btn.classList.toggle('active', t === tab);
+        if (pane) pane.classList.toggle('active', t === tab);
+    });
+
+    if (tab === 'video') updateVideoUI();
+}
+
+// ============================================
+// Image Lightbox Viewer
+// ============================================
+
+function openLightbox(url, caption) {
+    const modal = document.getElementById('imageLightbox');
+    const img = document.getElementById('lightboxImg');
+    const cap = document.getElementById('lightboxCaption');
+    const dl = document.getElementById('lightboxDownloadBtn');
+
+    if (modal && img) {
+        img.src = url;
+        if (cap) cap.textContent = caption || '';
+        if (dl) {
+            dl.href = url;
+            dl.download = 'evidence_photo.jpg';
+        }
+        modal.style.display = 'flex';
+    }
+}
+
+function closeLightbox(e) {
+    if (e && e.target && e.target.id === 'lightboxImg') return;
+    const modal = document.getElementById('imageLightbox');
+    if (modal) modal.style.display = 'none';
+}
+
+// Close modals on ESC key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeLightbox();
+        closeMediaSection();
+    }
 });

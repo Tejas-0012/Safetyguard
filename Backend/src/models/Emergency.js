@@ -28,6 +28,26 @@ const AudioRecordingSchema = new mongoose.Schema({
     default: 0,
   },
 });
+// Sub-schema for video recordings
+const VideoRecordingSchema = new mongoose.Schema({
+  url: {
+    type: String,
+    required: true,
+  },
+  durationSeconds: {
+    type: Number,
+    default: 0,
+  },
+  recordedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  sizeBytes: {
+    type: Number,
+    default: 0,
+  },
+});
+
 // Sub-schema for location points
 const LocationPointSchema = new mongoose.Schema({
   latitude: {
@@ -167,6 +187,7 @@ const EmergencySchema = new mongoose.Schema(
     ],
     cameraImages: [EmergencyImageSchema],
     audioRecordings: [AudioRecordingSchema],
+    videoRecordings: [VideoRecordingSchema],
     isVideoActive: { type: Boolean, default: false },
     receiverReplies: [ReceiverReplySchema],
     isWebStreamActive: { type: Boolean, default: false },

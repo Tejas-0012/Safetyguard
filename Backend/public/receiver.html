@@ -424,6 +424,234 @@
     width: 100%;
     height: 32px;
 }
+        /* =========================
+           MEDIA HUB & MODAL
+        ========================= */
+        .show-more-btn {
+            width: 100%;
+            margin-top: 12px;
+            padding: 11px 14px;
+            background: #e8eaf6;
+            color: #1a237e;
+            border: 1.5px solid #c5cae9;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .show-more-btn:hover {
+            background: #c5cae9;
+        }
+        .media-btn-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(26,35,126,0.18);
+        }
+        .media-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.65);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .media-modal-content {
+            background: white;
+            width: 100%;
+            max-width: 680px;
+            max-height: 85vh;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: modalSlideUp 0.25s ease-out;
+        }
+        @keyframes modalSlideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .media-modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+        }
+        .media-modal-header h2 {
+            font-size: 18px;
+            margin: 0;
+            color: #1a237e;
+        }
+        .modal-close-btn {
+            background: #e0e0e0;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close-btn:hover {
+            background: #bdbdbd;
+        }
+        .media-tabs-bar {
+            display: flex;
+            background: #f1f3f4;
+            padding: 6px;
+            gap: 6px;
+            border-bottom: 1px solid #eee;
+        }
+        .media-tab-btn {
+            flex: 1;
+            padding: 10px 8px;
+            border: none;
+            border-radius: 10px;
+            background: transparent;
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .media-tab-btn.active {
+            background: white;
+            color: #1a237e;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+        .media-tab-pane {
+            display: none;
+            padding: 18px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .media-tab-pane.active {
+            display: block;
+        }
+
+        /* Lightbox */
+        .lightbox-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.88);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .lightbox-content {
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        .lightbox-content img {
+            max-width: 100%;
+            max-height: 72vh;
+            border-radius: 12px;
+            object-fit: contain;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        .lightbox-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: rgba(255,255,255,0.25);
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .lightbox-caption {
+            color: white;
+            font-size: 14px;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .btn-download-primary {
+            background: #2e7d32;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .img-card-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: #fafafa;
+            border-radius: 12px;
+            padding: 6px;
+            border: 1px solid #eee;
+        }
+        .img-action-bar {
+            display: flex;
+            gap: 6px;
+        }
+        .btn-img-action {
+            flex: 1;
+            padding: 5px 6px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background: #fff;
+            color: #333;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            transition: all 0.15s;
+        }
+        .btn-img-action:hover {
+            background: #f0f0f0;
+        }
+        .btn-img-action.view {
+            background: #e8eaf6;
+            color: #1a237e;
+            border-color: #c5cae9;
+        }
+        .btn-img-action.download {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-color: #c8e6c9;
+        }
+
 
         /* =========================
            SMALL MOBILE
@@ -634,13 +862,14 @@
                 </div>
 
 
-                <div class="info-card">
+                <div class="info-card media-btn-card" id="mediaCardBtn" onclick="openMediaSection('video')" style="cursor: pointer;">
 
-                    <div class="label">
-                        Images
+                    <div class="label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>Media</span>
+                        <span style="font-size: 10px; background: #e8eaf6; color: #1a237e; padding: 2px 6px; border-radius: 8px; font-weight: bold;">TABS ↗</span>
                     </div>
 
-                    <div class="value" id="imageCount">
+                    <div class="value" id="mediaCount" style="color: #1a237e;">
                         0
                     </div>
 
@@ -654,10 +883,16 @@
     id="audioContainer"
     style="display: none;"
 >
-    <h3 style="font-size:18px;margin-bottom:14px;">
-        🎙️ Emergency Audio Recordings
-    </h3>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size:17px; margin: 0; color: #1a237e;">
+            🎙️ Audio Recordings
+        </h3>
+        <button onclick="openMediaSection('audio')" style="background: none; border: none; color: #1a237e; font-size: 12px; font-weight: 700; cursor: pointer;">
+            Media Hub ↗
+        </button>
+    </div>
     <div id="audioList"></div>
+    <div id="audioShowMoreContainer"></div>
 </div>
             <!-- EMERGENCY IMAGES -->
             <div
@@ -666,14 +901,20 @@
                 style="display: none;"
             >
 
-                <h3>
-                    📸 Emergency Images
-                </h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="font-size:17px; margin: 0; color: #1a237e;">
+                        📸 Camera Images
+                    </h3>
+                    <button onclick="openMediaSection('images')" style="background: none; border: none; color: #1a237e; font-size: 12px; font-weight: 700; cursor: pointer;">
+                        Media Hub ↗
+                    </button>
+                </div>
 
                 <div
                     class="image-grid"
                     id="imageGrid"
                 ></div>
+                <div id="imagesShowMoreContainer"></div>
 
             </div>
             <!-- ✅ Share location button -->
@@ -740,6 +981,66 @@
 
     <!-- EXISTING JAVASCRIPT -->
     <script src="/assets/js/receiver.js"></script>
+
+
+<!-- ============================================ -->
+<!-- UNIFIED MEDIA HUB MODAL                      -->
+<!-- ============================================ -->
+<div id="mediaModal" class="media-modal" style="display: none;">
+    <div class="media-modal-content">
+        <div class="media-modal-header">
+            <h2>📁 Emergency Evidence Media</h2>
+            <button class="modal-close-btn" onclick="closeMediaSection()">✕</button>
+        </div>
+        
+        <!-- Tabs Bar -->
+        <div class="media-tabs-bar">
+            <button class="media-tab-btn active" id="tabBtnVideo" onclick="switchMediaTab('video')">
+                🎥 Recorded Video (<span id="modalVideoCount">0</span>)
+            </button>
+            <button class="media-tab-btn" id="tabBtnAudio" onclick="switchMediaTab('audio')">
+                🎙️ Audio (<span id="modalAudioCount">0</span>)
+            </button>
+            <button class="media-tab-btn" id="tabBtnImages" onclick="switchMediaTab('images')">
+                📸 Images (<span id="modalImagesCount">0</span>)
+            </button>
+        </div>
+
+        <!-- Pane 1: Recorded Video -->
+        <div class="media-tab-pane active" id="modalPaneVideo">
+            <div id="modalVideoContent">
+                <div style="text-align:center; padding: 30px 10px; color: #666;">
+                    <span style="font-size: 36px;">🎥</span>
+                    <p style="margin-top: 10px; font-size: 14px;">Live stream is either active or recording is finalizing...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pane 2: Audio -->
+        <div class="media-tab-pane" id="modalPaneAudio">
+            <div id="modalAudioContent"></div>
+        </div>
+
+        <!-- Pane 3: Images -->
+        <div class="media-tab-pane" id="modalPaneImages">
+            <div id="modalImagesContent" class="image-grid"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- IMAGE LIGHTBOX MODAL                         -->
+<!-- ============================================ -->
+<div id="imageLightbox" class="lightbox-modal" style="display: none;" onclick="closeLightbox(event)">
+    <div class="lightbox-content">
+        <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+        <img id="lightboxImg" src="" alt="Emergency Photo">
+        <div id="lightboxCaption" class="lightbox-caption"></div>
+        <div style="margin-top: 14px; display: flex; justify-content: center;">
+            <a id="lightboxDownloadBtn" href="#" download class="btn-download-primary">⬇ Download Full Resolution</a>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

@@ -25,6 +25,8 @@ const {
   getReplies,
   uploadAudioChunk,
   uploadEmergencyImage,
+  uploadReceiverVideo,
+  uploadEmergencyVideo,
 } = require('../controllers/emergencyController');
 
 // ============ MULTER CONFIG FOR AUDIO UPLOADS ============
@@ -69,11 +71,31 @@ const imageUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+// ✅ Multer for video recordings
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/videos');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const id = req.params.id || req.params.token || 'stream';
+    const ext = path.extname(file.originalname) || '.webm';
+    cb(null, `stream_${id}_${Date.now()}${ext}`);
+  },
+});
+
+const videoUpload = multer({
+  storage: videoStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB max
+});
+
 // ============ PUBLIC ROUTES (no auth) ============
 router.get('/receiver/:token', getReceiverByToken);
 router.post('/receiver/:token/location', updateReceiverLocation);
 router.post('/receiver/:token/stop-sharing', stopReceiverSharing);
 router.post('/receiver/:token/reply', replyFromReceiver);
+router.post('/receiver/:token/video', videoUpload.single('video'), uploadReceiverVideo);
 
 router.get('/web/:token', getEmergencyByToken);
 router.post('/web/:token/reply', webReply);
@@ -97,6 +119,12 @@ router.post(
   protect,
   imageUpload.single('image'),
   uploadEmergencyImage
+);
+router.post(
+  '/:id/video',
+  protect,
+  videoUpload.single('video'),
+  uploadEmergencyVideo
 );
 
 // ============ GENERIC ROUTE (must be LAST) ============
