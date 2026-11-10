@@ -130,7 +130,6 @@ exports.uploadAudioChunk = async (req, res) => {
     const emergency = await Emergency.findOne({
       _id: id,
       userId: req.user.id,
-      status: 'active',
     });
 
     if (!emergency) {
@@ -138,7 +137,7 @@ exports.uploadAudioChunk = async (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(404).json({
         success: false,
-        message: 'Active emergency not found',
+        message: 'Emergency not found',
       });
     }
 
@@ -353,13 +352,25 @@ exports.stopEmergency = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const emergency = await Emergency.findOne({
+    let emergency = await Emergency.findOne({
       _id: id,
       userId: req.user.id,
       status: 'active',
     });
 
     if (!emergency) {
+      // Idempotency check: if already stopped/resolved, return 200 OK
+      const existing = await Emergency.findOne({
+        _id: id,
+        userId: req.user.id,
+      });
+      if (existing && existing.status === 'resolved') {
+        return res.status(200).json({
+          success: true,
+          message: 'Emergency already stopped',
+          emergency: existing,
+        });
+      }
       return res.status(404).json({
         success: false,
         message: 'Active emergency not found',
