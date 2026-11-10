@@ -1067,18 +1067,41 @@ function updateVideoUI() {
     }
 
     // 1. If recording has finalized (after 10 min or on Stop Emergency) OR already saved on server:
-    if (hasCompletedRecording && activeVideoUrl) {
-        const ext = activeVideoUrl.endsWith('.mp4') ? 'mp4' : 'webm';
+    if (savedVideos.length > 0) {
+        let videosHtml = savedVideos.map((v, i) => {
+            const ext = v.url.endsWith('.mp4') ? 'mp4' : 'webm';
+            const dateStr = formatIST(v.recordedAt || emergency.startTime);
+            const durStr = v.durationSeconds ? `${Math.floor(v.durationSeconds / 60)}m ${v.durationSeconds % 60}s` : '';
+            return `
+                <div style="background:#111; border-radius:14px; overflow:hidden; margin-bottom:16px; box-shadow:0 4px 14px rgba(0,0,0,0.2); padding: 8px;">
+                    <video src="${v.url}" controls playsinline preload="metadata" style="width:100%; max-height:360px; object-fit:contain; background:#000; border-radius:8px;"></video>
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding: 10px 4px 4px;">
+                        <div>
+                            <span style="font-weight:700; color:#fff; font-size:14px;">🎥 Recorded Video ${savedVideos.length > 1 ? `#${i + 1}` : ''}</span>
+                            <div style="font-size:12px; color:#aaa;">Recorded at ${dateStr} ${durStr ? `• Duration: ${durStr}` : ''}</div>
+                        </div>
+                        <a href="${v.url}" download="emergency_recording_${i + 1}.${ext}" class="btn-download-primary">
+                            ⬇ Download Video
+                        </a>
+                    </div>
+                </div>
+            `;
+        }).reverse().join('');
+
+        videoContent.innerHTML = videosHtml;
+    } 
+    else if (isRecordingFinalized && recordedVideoUrl) {
+        const ext = recordedVideoUrl.endsWith('.mp4') ? 'mp4' : 'webm';
         videoContent.innerHTML = `
             <div style="background:#000; border-radius:14px; overflow:hidden; margin-bottom:12px; box-shadow:0 4px 14px rgba(0,0,0,0.2);">
-                <video src="${activeVideoUrl}" controls playsinline style="width:100%; max-height:360px; object-fit:contain; background:#000;"></video>
+                <video src="${recordedVideoUrl}" controls playsinline style="width:100%; max-height:360px; object-fit:contain; background:#000;"></video>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding: 4px 0;">
                 <div>
                     <span style="font-weight:700; color:#1a237e; font-size:14px;">🎥 Live Stream Full Recording</span>
                     <div style="font-size:12px; color:#666;">Generated after 10 min or on Stop Emergency</div>
                 </div>
-                <a href="${activeVideoUrl}" download="emergency_recording_${Date.now()}.${ext}" class="btn-download-primary">
+                <a href="${recordedVideoUrl}" download="emergency_recording_${Date.now()}.${ext}" class="btn-download-primary">
                     ⬇ Download Video
                 </a>
             </div>
