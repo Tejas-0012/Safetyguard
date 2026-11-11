@@ -14,6 +14,7 @@ const contactRoutes = require('./src/routes/contactRoutes');
 const emergencyRoutes = require('./src/routes/emergencyRoutes');
 const errorHandler = require('./src/middleware/errorHandler');
 const livekitRoutes = require('./src/routes/livekitRoutes');
+const mongoSanitize = require('./src/middleware/sanitize');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -47,6 +48,9 @@ app.use('/api/livekit', livekitRoutes);
 // ============ BODY PARSER ============
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ============ NOSQL INJECTION PROTECTION ============
+app.use(mongoSanitize);
 
 // ============ STATIC FILES ============
 // MUST come before API routes so /assets/* works

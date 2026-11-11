@@ -4,6 +4,17 @@
 
 const token = window.location.pathname.split('/').pop();
 
+// Security: HTML entity escaper to prevent XSS attacks
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 let emergency = null;
 let receiver = null;
 let map = null;
@@ -214,31 +225,63 @@ function renderUI() {
     };
     const triggerText = triggerLabels[emergency.triggerSource] || 'Manual';
 
+    // 1. "Triggered By" must NEVER change to Stopped! It strictly shows the trigger source
+    if (statusValue) {
+        statusValue.textContent = triggerText;
+        statusValue.style.color = '#d32f2f';
+        statusValue.style.fontSize = '16px';
+        statusValue.style.fontWeight = '700';
+    }
+
+    // 2. Format Started & Ended time in Indian Standard Time (IST)
+    const startTimeStr = formatIST(emergency.startTime);
+    const stopTimeStr = (emergency.status !== 'active' && (emergency.endTime || emergency.updatedAt))
+        ? formatIST(emergency.endTime || emergency.updatedAt)
+        : (emergency.status !== 'active' ? formatIST(Date.now()) : null);
+
+    // Update timeline elements
+    const startTimeVal = document.getElementById('startTimeVal');
+    const endTimeVal = document.getElementById('endTimeVal');
+    const badgeStartTime = document.getElementById('badgeStartTime');
+    const badgeEndTime = document.getElementById('badgeEndTime');
+
+    if (startTimeVal) startTimeVal.textContent = `🟢 Started: ${startTimeStr || '--'}`;
+    if (badgeStartTime) badgeStartTime.textContent = `⏱️ Started: ${startTimeStr || '--'}`;
+
     if (emergency.status === 'active') {
-        if (stoppedBanner) stoppedBanner.style.display = 'none';
-        if (statusValue) {
-            statusValue.textContent = triggerText;
-            statusValue.style.color = '#ff1744';
-            statusValue.style.fontSize = '16px';
+        if (endTimeVal) {
+            endTimeVal.textContent = '● Active (Ongoing)';
+            endTimeVal.style.color = '#e53935';
         }
+        if (badgeEndTime) {
+            badgeEndTime.textContent = '● Active';
+            badgeEndTime.style.background = '#ffebee';
+            badgeEndTime.style.color = '#e53935';
+        }
+        if (stoppedBanner) stoppedBanner.style.display = 'none';
         if (statusBadge) {
             statusBadge.textContent = '● ACTIVE';
             statusBadge.className = 'status active';
             statusBadge.style.background = '#e53935';
         }
     } else {
-        const stopTimeStr = formatIST(emergency.endTime || emergency.updatedAt || Date.now());
+        const finalEnd = stopTimeStr || formatIST(Date.now());
+        if (endTimeVal) {
+            endTimeVal.textContent = `🛑 Ended: ${finalEnd}`;
+            endTimeVal.style.color = '#455a64';
+        }
+        if (badgeEndTime) {
+            badgeEndTime.textContent = `🛑 Ended: ${finalEnd}`;
+            badgeEndTime.style.background = '#eceff1';
+            badgeEndTime.style.color = '#37474f';
+        }
         if (stoppedBanner) {
             stoppedBanner.style.display = 'block';
-            if (stoppedTitle) stoppedTitle.textContent = `🛑 EMERGENCY STOPPED (${stopTimeStr})`;
-            if (stoppedSubtitle) stoppedSubtitle.textContent = `Victim stopped the alert at ${stopTimeStr}. Map displays the final last known location. All recorded media & photos are preserved below.`;
-        }
-        if (statusValue) {
-            statusValue.innerHTML = `<span style="color:#c62828; font-weight:800;">🛑 Stopped</span><br><span style="font-size:12px;color:#555;font-weight:600;">at ${stopTimeStr}</span>`;
-            statusValue.style.fontSize = '15px';
+            if (stoppedTitle) stoppedTitle.textContent = `🛑 EMERGENCY STOPPED (Ended: ${finalEnd})`;
+            if (stoppedSubtitle) stoppedSubtitle.textContent = `Alert was triggered via ${triggerText} at ${startTimeStr || 'start'} and ended at ${finalEnd}. Map displays final last known location. All recorded media & photos are preserved below.`;
         }
         if (statusBadge) {
-            statusBadge.textContent = `🛑 STOPPED (${stopTimeStr})`;
+            statusBadge.textContent = `🛑 STOPPED (${finalEnd})`;
             statusBadge.className = 'status resolved';
             statusBadge.style.background = '#455a64';
         }
@@ -648,7 +691,7 @@ function toggleVideoFullscreen() {
 
 async function connectLiveKitVideo(emergencyId) {
     try {
-        const response = await fetch(`/api/livekit/token?emergencyId=${emergencyId}&participantName=WebViewer&isReceiver=true`);
+        const response = await fetch(`/api/livekit/token?emergencyId=${encodeURIComponent(emergencyId)}&participantName=WebViewer&isReceiver=true&receiverToken=${encodeURIComponent(token)}`);
         const data = await response.json();
         
         if (!data.success) return;
@@ -746,7 +789,7 @@ function updateReplies() {
 
     list.innerHTML = replies.map(r => `
         <div class="reply-item">
-            <span><b>${r.contactName || 'Viewer'}:</b> ${r.message}</span>
+            <span><b>${escapeHtml(r.contactName || 'Viewer')}:</b> ${escapeHtml(r.message)}</span>
         </div>
     `).join('');
 }
