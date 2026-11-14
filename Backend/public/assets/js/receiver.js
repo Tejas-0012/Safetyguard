@@ -2,7 +2,9 @@
 // SafeGuard - Receiver Web Page (PHASE 2)
 // ============================================
 
-const token = window.location.pathname.split('/').pop();
+const urlParams = new URLSearchParams(window.location.search);
+const pathToken = window.location.pathname.split('/').pop().replace('receiver.html', '').trim();
+const token = urlParams.get('token') || pathToken;
 
 // Security: HTML entity escaper to prevent XSS attacks
 function escapeHtml(str) {
@@ -109,12 +111,14 @@ async function fetchEmergencyData() {
         }
         renderUI();
 
-        // If emergency is stopped, clear polling interval
+        // If emergency is stopped, clear active polling and schedule final trailing syncs
         if (emergency && emergency.status !== 'active') {
             if (updateInterval) {
                 clearInterval(updateInterval);
                 updateInterval = null;
-                console.log("🛑 Emergency is resolved/stopped. Polling paused.");
+                console.log("🛑 Emergency is resolved/stopped. Scheduling trailing syncs...");
+                setTimeout(fetchEmergencyData, 4000);
+                setTimeout(fetchEmergencyData, 10000);
             }
         }
 
@@ -691,10 +695,14 @@ function toggleVideoFullscreen() {
 
 async function connectLiveKitVideo(emergencyId) {
     try {
+        console.log(`Connecting LiveKit video for emergency: ${emergencyId}, token: ${token}`);
         const response = await fetch(`/api/livekit/token?emergencyId=${encodeURIComponent(emergencyId)}&participantName=WebViewer&isReceiver=true&receiverToken=${encodeURIComponent(token)}`);
         const data = await response.json();
         
-        if (!data.success) return;
+        if (!data.success) {
+            console.error("LiveKit token request failed:", data.error || data);
+            return;
+        }
 
         const room = new LivekitClient.Room();
         currentLiveKitRoom = room;

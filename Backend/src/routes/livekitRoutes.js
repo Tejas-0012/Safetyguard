@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const { AccessToken } = require('livekit-server-sdk');
 const Emergency = require('../models/Emergency');
@@ -8,20 +9,24 @@ const Emergency = require('../models/Emergency');
 // @route   GET /api/livekit/token
 // @access  Protected (Requires Bearer JWT for Victim or receiverToken for Contact)
 router.get('/token', async (req, res) => {
-  const { emergencyId, participantName, isReceiver, receiverToken } = req.query;
+  let { emergencyId, participantName, isReceiver, receiverToken } = req.query;
 
-  if (!emergencyId) {
-    return res.status(400).json({ success: false, error: 'emergencyId is required' });
+  if (!emergencyId && !receiverToken) {
+    return res.status(400).json({ success: false, error: 'emergencyId or receiverToken is required' });
   }
 
   try {
     let isAuthorized = false;
     let canPublishStream = false;
 
-    // Check 1: Victim / App Sender authenticated via Bearer JWT token
+    // Check 1: Victim / App Sender authenticated via Bearer JWT token (header or query)
+    let jwtToken = req.query.token;
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const jwtToken = authHeader.split(' ')[1];
+    if (authHeader) {
+      jwtToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+    }
+
+    if (jwtToken && emergencyId) {
       try {
         const decoded = jwt.verify(jwtToken, process.env.JWT_SECRET);
         const emergency = await Emergency.findById(emergencyId);
@@ -30,33 +35,50 @@ router.get('/token', async (req, res) => {
           canPublishStream = isReceiver !== 'true'; // Only verified victim can publish video/audio
         }
       } catch (err) {
-        // Invalid or expired JWT
+        console.warn('LiveKit JWT verify error:', err.message);
       }
     }
 
     // Check 2: Receiver authenticated via valid cryptographic receiverToken
     if (!isAuthorized && receiverToken) {
-      const emergency = await Emergency.findOne({
-        _id: emergencyId,
-        'receiverLinks.token': receiverToken,
-      });
+      const orConditions = [
+        { 'receiverLinks.token': receiverToken },
+        { webStreamToken: receiverToken },
+      ];
+      const query = { $or: orConditions };
+      if (emergencyId && mongoose.Types.ObjectId.isValid(emergencyId)) {
+        query._id = emergencyId;
+      }
+
+      const emergency = await Emergency.findOne(query);
       if (emergency) {
         isAuthorized = true;
         canPublishStream = false; // Receivers can NEVER publish video/audio
+        emergencyId = emergency._id.toString(); // Enforce verified emergency ID room
       }
     }
 
     if (!isAuthorized) {
+      console.warn(`LiveKit Auth Denied for emergencyId: ${emergencyId}, receiverToken: ${receiverToken ? receiverToken.substring(0, 6) + '...' : 'none'}`);
       return res.status(403).json({
         success: false,
         error: 'Forbidden: You do not have permission to access this live stream',
       });
     }
 
+    const apiKey = process.env.LIVEKIT_API_KEY || 'APIz682P5tH9ycn';
+    const apiSecret = process.env.LIVEKIT_API_SECRET || '8un3YdGeC9teQ8eaxUFuR2zjvexNxo2vWheeJlREP62C';
+    const livekitUrl = process.env.LIVEKIT_URL || 'wss://safeguard-psz4124c.livekit.cloud';
+
+    if (!apiKey || !apiSecret || !livekitUrl) {
+      console.error('LiveKit credentials missing in environment variables');
+      return res.status(500).json({ success: false, error: 'LiveKit server configuration missing on server' });
+    }
+
     // Create LiveKit token
     const at = new AccessToken(
-      process.env.LIVEKIT_API_KEY,
-      process.env.LIVEKIT_API_SECRET,
+      apiKey,
+      apiSecret,
       {
         identity: participantName || (canPublishStream ? 'Victim' : 'Receiver'),
         ttl: '2h',
@@ -77,11 +99,11 @@ router.get('/token', async (req, res) => {
     res.json({
       success: true,
       token: token,
-      url: process.env.LIVEKIT_URL,
+      url: livekitUrl,
     });
   } catch (error) {
     console.error('LiveKit Token Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to generate token' });
+    res.status(500).json({ success: false, error: 'Failed to generate token: ' + error.message });
   }
 });
 

@@ -67,7 +67,6 @@ exports.uploadEmergencyImage = async (req, res) => {
     const emergency = await Emergency.findOne({
       _id: id,
       userId: req.user.id,
-      status: 'active',
     });
 
     if (!emergency) {
@@ -75,7 +74,7 @@ exports.uploadEmergencyImage = async (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(404).json({
         success: false,
-        message: 'Active emergency not found',
+        message: 'Emergency not found',
       });
     }
 
@@ -310,13 +309,12 @@ exports.updateLocation = async (req, res) => {
     const emergency = await Emergency.findOne({
       _id: id,
       userId: req.user.id,
-      status: 'active',
     });
 
     if (!emergency) {
       return res.status(404).json({
         success: false,
-        message: 'Active emergency not found',
+        message: 'Emergency not found',
       });
     }
 
@@ -641,13 +639,12 @@ exports.addImage = async (req, res) => {
     const emergency = await Emergency.findOne({
       _id: id,
       userId: req.user.id,
-      status: 'active',
     });
 
     if (!emergency) {
       return res.status(404).json({
         success: false,
-        message: 'Active emergency not found',
+        message: 'Emergency not found',
       });
     }
 
