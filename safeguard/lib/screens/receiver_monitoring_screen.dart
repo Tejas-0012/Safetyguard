@@ -7,6 +7,7 @@ import '../providers/emergency_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/sms_service.dart';
 import '../models/emergency_model.dart';
+import '../utils/custom_map_marker.dart';
 
 class ReceiverMonitoringScreen extends StatefulWidget {
   final String emergencyId;
@@ -25,16 +26,35 @@ class _ReceiverMonitoringScreenState extends State<ReceiverMonitoringScreen> {
   bool _isLoading = true;
   Emergency? _emergency;
   List<ReceiverReply> _replies = [];
+  BitmapDescriptor? _senderMarkerIcon;
 
   @override
   void initState() {
     super.initState();
+    _loadCustomIcon();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadEmergencyDetails();
         _setupSmsListener();
       }
     });
+  }
+
+  Future<void> _loadCustomIcon() async {
+    try {
+      final icon = await CustomMapMarker.createPersonPin(
+        label: _emergency?.userName ?? 'Sender',
+        pinColor: const Color(0xFFE53935),
+        isVictim: true,
+      );
+      if (mounted) {
+        setState(() {
+          _senderMarkerIcon = icon;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading custom marker icon: $e');
+    }
   }
 
   Future<void> _loadEmergencyDetails() async {
@@ -430,8 +450,10 @@ class _ReceiverMonitoringScreenState extends State<ReceiverMonitoringScreen> {
           _emergency!.currentLocation!.latitude,
           _emergency!.currentLocation!.longitude,
         ),
-        infoWindow: const InfoWindow(title: 'Sender\'s Location'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        anchor: const Offset(0.5, 0.95),
+        infoWindow: InfoWindow(title: _emergency?.userName ?? 'Sender\'s Location'),
+        icon: _senderMarkerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
       ),
     };
   }

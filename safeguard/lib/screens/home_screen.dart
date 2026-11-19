@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../services/sos_trigger_service.dart';
 import '../services/shake_service.dart';
 import '../utils/app_colors.dart';
+import '../utils/custom_map_marker.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../services/emergency_call_service.dart';
 import 'notifications_screen.dart';
@@ -26,10 +27,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late GoogleMapController _mapController;
   bool _isReloading = false;
+  BitmapDescriptor? _userLocationMarkerIcon;
 
   @override
   void initState() {
     super.initState();
+    _initCustomMarker();
 
     // ✅ Defer loading until after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -38,6 +41,23 @@ class _HomeScreenState extends State<HomeScreen> {
         _setupLocationTracking();
       }
     });
+  }
+
+  Future<void> _initCustomMarker() async {
+    try {
+      final icon = await CustomMapMarker.createPersonPin(
+        label: 'You',
+        pinColor: const Color(0xFF1E88E5),
+        isVictim: false,
+      );
+      if (mounted) {
+        setState(() {
+          _userLocationMarkerIcon = icon;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error creating custom map marker: $e');
+    }
   }
 
   Future<void> _loadData() async {
@@ -165,10 +185,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Marker(
               markerId: const MarkerId('current_location'),
               position: LatLng(position.latitude, position.longitude),
-              infoWindow: const InfoWindow(title: 'Your Location'),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueAzure,
-              ),
+              anchor: const Offset(0.5, 0.95),
+              infoWindow: const InfoWindow(title: 'You'),
+              icon: _userLocationMarkerIcon ??
+                  BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueAzure,
+                  ),
             ),
           }
         : <Marker>{};

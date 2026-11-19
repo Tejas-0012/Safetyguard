@@ -14,6 +14,7 @@ import '../services/sms_service.dart';
 import '../services/foreground_service.dart';
 import '../services/emergency_call_service.dart';
 import '../utils/app_colors.dart';
+import '../utils/custom_map_marker.dart';
 import '../widgets/emergency_call_buttons.dart';
 import '../models/emergency_model.dart';
 import 'emergency_replies_screen.dart';
@@ -383,42 +384,58 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     });
   }
 
-  void _buildAllMarkers(LatLng victimPos) {
+  Future<void> _buildAllMarkers(LatLng victimPos) async {
     final Set<Marker> newMarkers = {};
 
-    newMarkers.add(
-      Marker(
-        markerId: const MarkerId('victim'),
-        position: victimPos,
-        infoWindow: const InfoWindow(title: 'You'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ),
-    );
-
-    for (final link in _receiverLinks) {
-      if (!link.hasLocation) continue;
-
-      final position = LatLng(link.latitude!, link.longitude!);
-      final distanceMeters = Geolocator.distanceBetween(
-        victimPos.latitude,
-        victimPos.longitude,
-        position.latitude,
-        position.longitude,
+    try {
+      final victimIcon = await CustomMapMarker.createPersonPin(
+        label: 'You',
+        pinColor: const Color(0xFFE53935),
+        isVictim: true,
       );
 
       newMarkers.add(
         Marker(
-          markerId: MarkerId('receiver_${link.token}'),
-          position: position,
-          infoWindow: InfoWindow(
-            title: link.contactName,
-            snippet: '${_formatDistance(distanceMeters)} away',
-          ),
-          icon:
-              _personIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          markerId: const MarkerId('victim'),
+          position: victimPos,
+          anchor: const Offset(0.5, 0.95),
+          infoWindow: const InfoWindow(title: 'You'),
+          icon: victimIcon,
         ),
       );
+
+      for (final link in _receiverLinks) {
+        if (!link.hasLocation) continue;
+
+        final position = LatLng(link.latitude!, link.longitude!);
+        final distanceMeters = Geolocator.distanceBetween(
+          victimPos.latitude,
+          victimPos.longitude,
+          position.latitude,
+          position.longitude,
+        );
+
+        final receiverIcon = await CustomMapMarker.createPersonPin(
+          label: link.contactName,
+          pinColor: const Color(0xFF1E88E5),
+          isVictim: false,
+        );
+
+        newMarkers.add(
+          Marker(
+            markerId: MarkerId('receiver_${link.token}'),
+            position: position,
+            anchor: const Offset(0.5, 0.95),
+            infoWindow: InfoWindow(
+              title: link.contactName,
+              snippet: '${_formatDistance(distanceMeters)} away',
+            ),
+            icon: receiverIcon,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error generating custom map markers: $e');
     }
 
     if (mounted) {
