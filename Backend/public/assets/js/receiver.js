@@ -683,13 +683,26 @@ async function requestCameraSwitch(target) {
 
 
 function toggleVideoFullscreen() {
-    const video = document.getElementById('liveVideoPlayer');
-    if (!video) return;
+    const container = document.getElementById('videoContainer') || document.getElementById('liveVideoPlayer');
+    if (!container) return;
     if (!document.fullscreenElement) {
-        if (video.requestFullscreen) video.requestFullscreen();
-        else if (video.webkitRequestFullscreen) video.webkitRequestFullscreen();
+        if (container.requestFullscreen) container.requestFullscreen();
+        else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
     } else {
         if (document.exitFullscreen) document.exitFullscreen();
+    }
+}
+
+function toggleVideoFit() {
+    const video = document.getElementById('liveVideoPlayer');
+    const btn = document.getElementById('fitToggleBtn');
+    if (!video) return;
+    if (video.style.objectFit === 'cover') {
+        video.style.objectFit = 'contain';
+        if (btn) btn.innerHTML = '<span>🔲</span> Fill';
+    } else {
+        video.style.objectFit = 'cover';
+        if (btn) btn.innerHTML = '<span>🔍</span> Fit';
     }
 }
 
@@ -712,6 +725,7 @@ async function connectLiveKitVideo(emergencyId) {
 
             if (track.kind === LivekitClient.Track.Kind.Video) {
                 const videoEl = document.getElementById('liveVideoPlayer');
+                const videoBgEl = document.getElementById('liveVideoPlayerBg');
                 if (videoEl) {
                     track.attach(videoEl);
                     videoEl.play().then(() => {
@@ -721,9 +735,13 @@ async function connectLiveKitVideo(emergencyId) {
                         ensureStreamReadyAndRecord();
                     };
                 }
+                if (videoBgEl) {
+                    track.attach(videoBgEl);
+                    videoBgEl.play().catch(e => console.log("Bg video play pending interaction:", e));
+                }
 
                 const container = document.getElementById('videoContainer');
-                if (container) container.style.display = 'block';
+                if (container) container.style.display = 'flex';
 
                 if (publication.trackName === "front_camera") {
                     updateCameraUI('front');
@@ -743,7 +761,9 @@ async function connectLiveKitVideo(emergencyId) {
             console.log(`📡 LiveKit Track Unsubscribed: ${track.kind}`);
             if (track.kind === LivekitClient.Track.Kind.Video) {
                 const videoEl = document.getElementById('liveVideoPlayer');
+                const videoBgEl = document.getElementById('liveVideoPlayerBg');
                 if (videoEl) track.detach(videoEl);
+                if (videoBgEl) track.detach(videoBgEl);
             } else if (track.kind === LivekitClient.Track.Kind.Audio) {
                 const audioEl = document.getElementById('liveAudioPlayer');
                 if (audioEl) track.detach(audioEl);
@@ -769,8 +789,10 @@ async function connectLiveKitVideo(emergencyId) {
         // Force video and audio to play on first user interaction
         document.body.addEventListener('click', () => {
             const videoEl = document.getElementById('liveVideoPlayer');
+            const videoBgEl = document.getElementById('liveVideoPlayerBg');
             const audioEl = document.getElementById('liveAudioPlayer');
             if (videoEl) videoEl.play().catch(() => {});
+            if (videoBgEl) videoBgEl.play().catch(() => {});
             if (audioEl) audioEl.play().catch(() => {});
         }, { once: true });
 
@@ -918,7 +940,17 @@ function startCompositorLoop() {
         const video = document.getElementById('liveVideoPlayer');
         if (video && video.readyState >= 2 && video.videoWidth > 0) {
             try {
-                compositorCtx.drawImage(video, 0, 0, 1280, 720);
+                if (video.videoWidth < video.videoHeight) {
+                    // Portrait orientation: keep aspect ratio centered, avoid stretching
+                    compositorCtx.fillStyle = '#0d1117';
+                    compositorCtx.fillRect(0, 0, 1280, 720);
+                    const aspect = video.videoWidth / video.videoHeight;
+                    const drawWidth = 720 * aspect;
+                    const drawX = (1280 - drawWidth) / 2;
+                    compositorCtx.drawImage(video, drawX, 0, drawWidth, 720);
+                } else {
+                    compositorCtx.drawImage(video, 0, 0, 1280, 720);
+                }
             } catch (err) {
                 // Ignore transient draw error during camera switch
             }
