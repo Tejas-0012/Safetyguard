@@ -41,6 +41,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -71,6 +72,7 @@ class LiveKitManager(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var eventsJob: Job? = null
     private var autoCaptureJob: Job? = null
+    private val cameraSwitchMutex = Mutex()
 
     private var frontCameraId: String? = null
     private var backCameraId: String? = null
@@ -194,7 +196,7 @@ class LiveKitManager(
 
                 // Start with the Back Camera (1x main) by default
                 isFrontCameraActive = false
-                publishCamera(newRoom, backCameraId ?: "0", "back_camera")
+                publishCamera(newRoom, backCameraId ?: "0", "back_camera", isFront = false)
 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ LiveKit Stream Error", e)
@@ -246,6 +248,13 @@ class LiveKitManager(
 
     fun switchCamera(target: String? = null) {
         val r = room ?: return
+
+        // Drop concurrent switch requests if a hardware transition is already running
+        if (cameraSwitchMutex.isLocked) {
+            Log.w(TAG, "⚠️ Camera switch already in progress, dropping concurrent request: $target")
+            return
+        }
+
         val switchToFront = when (target?.lowercase()) {
             "front" -> true
             "back" -> false
@@ -258,15 +267,21 @@ class LiveKitManager(
             return
         }
 
-        isFrontCameraActive = switchToFront
-        val targetId = if (isFrontCameraActive) (frontCameraId ?: "1") else (backCameraId ?: "0")
-        val trackName = if (isFrontCameraActive) "front_camera" else "back_camera"
+        // Broadcast to all receivers immediately that switching has begun
+        sendCameraSwitching(if (switchToFront) "front" else "back")
 
-        publishCamera(r, targetId, trackName)
+        val targetId = if (switchToFront) (frontCameraId ?: "1") else (backCameraId ?: "0")
+        val trackName = if (switchToFront) "front_camera" else "back_camera"
+
+        publishCamera(r, targetId, trackName, switchToFront)
     }
 
-    private fun publishCamera(room: Room, deviceId: String, trackName: String) {
+    private fun publishCamera(room: Room, deviceId: String, trackName: String, isFront: Boolean) {
         scope.launch {
+            if (!cameraSwitchMutex.tryLock()) {
+                Log.w(TAG, "⚠️ Could not acquire camera switch mutex, transition in flight")
+                return@launch
+            }
             try {
                 // 1. Remove frame sink and stop old track
                 currentVideoTrack?.removeRenderer(frameCaptureSink)
@@ -277,7 +292,7 @@ class LiveKitManager(
                 currentVideoTrack = null
 
                 // 2. Allow Android Camera Hardware HAL to cleanly release the sensor
-                delay(300)
+                delay(350)
 
                 // 3. Create and publish new video track at 1x wide angle
                 val track = room.localParticipant?.createVideoTrack(
@@ -302,6 +317,7 @@ class LiveKitManager(
                     // Attach frame capture sink to grab live frames natively
                     track.addRenderer(frameCaptureSink)
                     currentVideoTrack = track
+                    isFrontCameraActive = isFront
 
                     Log.d(TAG, "📸 Published: $trackName ($deviceId) at ${VIDEO_WIDTH}x${VIDEO_HEIGHT} @ ${VIDEO_FPS}fps")
                     sendCameraState()
@@ -311,6 +327,24 @@ class LiveKitManager(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to publish $trackName", e)
+            } finally {
+                cameraSwitchMutex.unlock()
+            }
+        }
+    }
+
+    private fun sendCameraSwitching(target: String) {
+        scope.launch {
+            try {
+                val state = JSONObject().apply {
+                    put("type", "CAMERA_SWITCHING")
+                    put("target", target)
+                }
+                val payload = state.toString().toByteArray(Charsets.UTF_8)
+                room?.localParticipant?.publishData(payload, DataPublishReliability.RELIABLE)
+                Log.d(TAG, "📤 Sent CAMERA_SWITCHING to room: $target")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to broadcast CAMERA_SWITCHING", e)
             }
         }
     }
