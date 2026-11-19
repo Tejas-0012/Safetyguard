@@ -299,6 +299,28 @@ function renderUI() {
 
 let locationPathLine = null;
 
+function createPersonPinSvg(pinColor) {
+    const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58">
+      <defs>
+        <filter id="pinShadow" x="-20%" y="-10%" width="140%" height="130%">
+          <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.35"/>
+        </filter>
+      </defs>
+      <!-- Pin Body (Circular top + pointed bottom tip) -->
+      <path d="M 23 3 C 11.4 3 2 12.4 2 24 C 2 36.2 18.5 51.5 21.8 55.4 C 22.4 56.1 23.6 56.1 24.2 55.4 C 27.5 51.5 44 36.2 44 24 C 44 12.4 34.6 3 23 3 Z" 
+            fill="${pinColor}" stroke="#FFFFFF" stroke-width="2.5" filter="url(#pinShadow)"/>
+      <!-- Inner White Badge -->
+      <circle cx="23" cy="22" r="14.5" fill="#FFFFFF"/>
+      <!-- Person Silhouette -->
+      <!-- Head -->
+      <circle cx="23" cy="17.5" r="5" fill="${pinColor}"/>
+      <!-- Shoulders -->
+      <path d="M 14.5 31 C 14.5 26.2 18.2 23.5 23 23.5 C 27.8 23.5 31.5 26.2 31.5 31 C 29.5 34.5 26.5 36.5 23 36.5 C 19.5 36.5 16.5 34.5 14.5 31 Z" fill="${pinColor}"/>
+    </svg>`;
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
+}
+
 function updateMap() {
     let loc = emergency.currentLocation;
     if ((!loc || (loc.latitude === 0 && loc.longitude === 0)) && emergency.locationPoints?.length > 0) {
@@ -312,6 +334,16 @@ function updateMap() {
     const markerTitle = emergency.status !== 'active'
         ? `Last Known Location (Emergency Stopped at ${stopTimeStr})`
         : `${emergency.userName || 'Victim'}'s Live Location`;
+
+    const victimLabelText = emergency.userName || 'Victim';
+    const victimPinColor = emergency.status === 'active' ? '#e53935' : '#b71c1c';
+
+    const victimIconConfig = {
+        url: createPersonPinSvg(victimPinColor),
+        scaledSize: new google.maps.Size(42, 53),
+        anchor: new google.maps.Point(21, 52),
+        labelOrigin: new google.maps.Point(21, -10),
+    };
 
     if (!map) {
         map = new google.maps.Map(document.getElementById('map'), {
@@ -327,25 +359,19 @@ function updateMap() {
             position: pos,
             map: map,
             title: markerTitle,
-            icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: emergency.status === 'active' ? '#ff1744' : '#d32f2f',
-                fillOpacity: 1,
-                strokeColor: '#ffffff',
-                strokeWeight: 3,
-                scale: 10,
+            icon: victimIconConfig,
+            label: {
+                text: victimLabelText,
+                className: 'victim-map-label'
             }
         });
     } else {
         marker.setPosition(pos);
         marker.setTitle(markerTitle);
-        marker.setIcon({
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: emergency.status === 'active' ? '#ff1744' : '#d32f2f',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 3,
-            scale: 10,
+        marker.setIcon(victimIconConfig);
+        marker.setLabel({
+            text: victimLabelText,
+            className: 'victim-map-label'
         });
         map.panTo(pos);
     }
@@ -372,26 +398,35 @@ function updateMap() {
         }
     }
 
-    // ✅ Show other receivers on the map (Phase 3 preview)
+    // ✅ Show other receivers on the map with Person Pin & Name Label
     if (emergency.otherReceivers && Array.isArray(emergency.otherReceivers)) {
         emergency.otherReceivers.forEach((other) => {
             if (!other.location || other.location.latitude == null) return;
             const otherPos = { lat: other.location.latitude, lng: other.location.longitude };
 
+            const otherIconConfig = {
+                url: createPersonPinSvg('#1e88e5'),
+                scaledSize: new google.maps.Size(38, 48),
+                anchor: new google.maps.Point(19, 47),
+                labelOrigin: new google.maps.Point(19, -8),
+            };
+
             if (otherMarkers[other.contactName]) {
                 otherMarkers[other.contactName].setPosition(otherPos);
+                otherMarkers[other.contactName].setIcon(otherIconConfig);
+                otherMarkers[other.contactName].setLabel({
+                    text: other.contactName,
+                    className: 'receiver-map-label'
+                });
             } else {
                 otherMarkers[other.contactName] = new google.maps.Marker({
                     position: otherPos,
                     map: map,
                     title: other.contactName,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        fillColor: '#2196F3',
-                        fillOpacity: 0.9,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 2,
-                        scale: 8,
+                    icon: otherIconConfig,
+                    label: {
+                        text: other.contactName,
+                        className: 'receiver-map-label'
                     }
                 });
             }
