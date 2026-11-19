@@ -624,10 +624,38 @@ function updateImages() {
 let currentLiveKitRoom = null;
 let currentActiveCamera = 'back'; // 'back' | 'front'
 let isSwitchingCamera = false;
+let switchSafetyTimeout = null;
+
+function setSwitchingState(isSwitching) {
+    isSwitchingCamera = isSwitching;
+    const btn = document.getElementById('switchCameraBtn');
+    if (btn) {
+        if (isSwitching) {
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            btn.innerHTML = '<span>⏳</span> Switching...';
+        } else {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+
+    if (switchSafetyTimeout) clearTimeout(switchSafetyTimeout);
+    if (isSwitching) {
+        // Fallback safety: unstick button after 6s if device loses signal
+        switchSafetyTimeout = setTimeout(() => {
+            if (isSwitchingCamera) {
+                updateCameraUI(currentActiveCamera);
+            }
+        }, 6000);
+    }
+}
 
 function updateCameraUI(camera) {
     currentActiveCamera = camera;
     isSwitchingCamera = false;
+    if (switchSafetyTimeout) clearTimeout(switchSafetyTimeout);
+
     const badge = document.getElementById('cameraBadge');
     const btn = document.getElementById('switchCameraBtn');
 
@@ -649,17 +677,14 @@ async function requestCameraSwitch(target) {
         alert("Live stream is not connected yet.");
         return;
     }
-    if (isSwitchingCamera) return;
+    if (isSwitchingCamera) {
+        console.warn("Camera switch already in progress, ignoring click.");
+        return;
+    }
 
     const nextCamera = target || (currentActiveCamera === 'back' ? 'front' : 'back');
-    isSwitchingCamera = true;
-
-    const btn = document.getElementById('switchCameraBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.style.opacity = '0.7';
-        btn.innerHTML = '<span>⏳</span> Switching...';
-    }
+    // Immediately lock UI locally
+    setSwitchingState(true);
 
     try {
         const payload = new TextEncoder().encode(JSON.stringify({
@@ -668,13 +693,6 @@ async function requestCameraSwitch(target) {
         }));
         await currentLiveKitRoom.localParticipant.publishData(payload, { reliable: true });
         console.log(`📤 Sent remote camera switch request: ${nextCamera}`);
-
-        // Safety fallback re-enable after 5s if device hasn't acknowledged
-        setTimeout(() => {
-            if (isSwitchingCamera) {
-                updateCameraUI(currentActiveCamera);
-            }
-        }, 5000);
     } catch (e) {
         console.error("Failed to request camera switch:", e);
         updateCameraUI(currentActiveCamera);
@@ -775,7 +793,16 @@ async function connectLiveKitVideo(emergencyId) {
                 const text = new TextDecoder().decode(payload);
                 console.log("📩 LiveKit Data Received:", text);
                 const msg = JSON.parse(text);
+
+                // 1. Another receiver or phone started a switch: lock UI across all viewers
+                if (msg.type === "CAMERA_SWITCHING" || msg.action === "SWITCH_CAMERA") {
+                    console.log("🔄 Camera switch in progress by contact/phone...");
+                    setSwitchingState(true);
+                }
+
+                // 2. Phone confirmed new camera state: synchronize and unlock UI
                 if (msg.type === "CAMERA_STATE" && msg.activeCamera) {
+                    console.log("✅ Camera switch confirmed:", msg.activeCamera);
                     updateCameraUI(msg.activeCamera);
                 }
             } catch (err) {
