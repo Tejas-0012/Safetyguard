@@ -66,9 +66,9 @@ router.get('/token', async (req, res) => {
       });
     }
 
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    const livekitUrl = process.env.LIVEKIT_URL;
+    const apiKey = process.env.LIVEKIT_API_KEY || 'APIz682P5tH9ycn';
+    const apiSecret = process.env.LIVEKIT_API_SECRET || '8un3YdGeC9teQ8eaxUFuR2zjvexNxo2vWheeJlREP62C';
+    const livekitUrl = process.env.LIVEKIT_URL || 'wss://safeguard-psz4124c.livekit.cloud';
 
     if (!apiKey || !apiSecret || !livekitUrl) {
       console.error('LiveKit credentials missing in environment variables (LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL)');
