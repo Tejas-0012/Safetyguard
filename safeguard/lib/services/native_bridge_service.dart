@@ -26,6 +26,26 @@ class NativeBridgeService {
     }
   }
 
+  /// Check if the app was launched directly for an active emergency.
+  static Future<bool> wasLaunchedForEmergency() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('wasLaunchedForEmergency');
+      return result ?? false;
+    } catch (e) {
+      print('NativeBridge: wasLaunchedForEmergency error: $e');
+      return false;
+    }
+  }
+
+  /// Acknowledge that the "emergency launch" flag has been consumed.
+  static Future<void> clearEmergencyLaunch() async {
+    try {
+      await _channel.invokeMethod('clearEmergencyLaunch');
+    } catch (e) {
+      print('NativeBridge: clearEmergencyLaunch error: $e');
+    }
+  }
+
   /// Register callbacks for native → Flutter events.
   static void setupNativeCallbacks({
     required Function onOpenEmergency,

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.telephony.SmsManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -65,9 +66,12 @@ class SafeGuardForegroundService : LifecycleService() {
             startServiceIntent(context, intent)
         }
 
-        fun startEmergency(context: Context) {
+        fun startEmergency(context: Context, emergencyId: String? = null) {
             val intent = Intent(context, SafeGuardForegroundService::class.java).apply {
                 action = ACTION_START_EMERGENCY
+                if (!emergencyId.isNullOrEmpty()) {
+                    putExtra("emergencyId", emergencyId)
+                }
             }
             startServiceIntent(context, intent)
         }
@@ -76,7 +80,11 @@ class SafeGuardForegroundService : LifecycleService() {
             val intent = Intent(context, SafeGuardForegroundService::class.java).apply {
                 action = ACTION_STOP_EMERGENCY
             }
-            startServiceIntent(context, intent)
+            try {
+                context.startService(intent)
+            } catch (_: Exception) {
+                startServiceIntent(context, intent)
+            }
         }
 
         private fun startServiceIntent(context: Context, intent: Intent) {
@@ -98,6 +106,7 @@ class SafeGuardForegroundService : LifecycleService() {
     private var isShakeEnabled = false
     private var isVoiceEnabled = false
     private var isEmergencyActive = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -117,6 +126,7 @@ class SafeGuardForegroundService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        ensureForeground()
         val action = intent?.action ?: return START_STICKY
         Log.d(TAG, "onStartCommand action: $action")
 
@@ -152,7 +162,12 @@ class SafeGuardForegroundService : LifecycleService() {
             }
             ACTION_START_EMERGENCY -> {
                 isEmergencyActive = true
-                prefs.edit().putBoolean(KEY_EMERGENCY_ACTIVE, true).apply()
+                val emId = intent?.getStringExtra("emergencyId")
+                val editor = prefs.edit().putBoolean(KEY_EMERGENCY_ACTIVE, true)
+                if (!emId.isNullOrEmpty()) {
+                    editor.putString(KEY_EMERGENCY_ID, emId)
+                }
+                editor.apply()
                 ensureForeground()
                 startEvidenceStreaming()
             }
@@ -325,6 +340,16 @@ class SafeGuardForegroundService : LifecycleService() {
                 liveKitManager?.startStreaming(emergencyId, token, apiBase)
                 Log.d(TAG, "📹 LiveKit streaming started")
             }
+
+            // Acquire CPU partial wakelock to ensure video recording continues if screen is locked
+            if (wakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SafeGuard::EmergencyWakeLock")?.apply {
+                    setReferenceCounted(false)
+                    acquire(15 * 60 * 1000L) // 15 mins max safety timeout
+                }
+                Log.d(TAG, "🔋 CPU Partial WakeLock acquired for emergency recording")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "startEvidenceStreaming error", e)
         }
@@ -341,16 +366,28 @@ class SafeGuardForegroundService : LifecycleService() {
 
         prefs.edit().putBoolean(KEY_EMERGENCY_ACTIVE, false).apply()
 
-        // 1. Stop streaming hardware
+        // 1. Stop streaming hardware and finalize video upload
         try {
             audioRecorder?.stop()
             audioRecorder = null
+            liveKitManager?.stopAndUploadVideo()
             liveKitManager?.stopStreaming()
             liveKitManager = null
-            Log.d(TAG, "Hardware streaming stopped")
+            Log.d(TAG, "Hardware streaming stopped and video upload triggered")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping hardware", e)
         }
+
+        // Release WakeLock
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                Log.d(TAG, "🔋 CPU Partial WakeLock released")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing WakeLock", e)
+        }
+        wakeLock = null
 
         // 2. Call backend /stop API in background
         if (!token.isNullOrEmpty() && !emergencyId.isNullOrEmpty()) {

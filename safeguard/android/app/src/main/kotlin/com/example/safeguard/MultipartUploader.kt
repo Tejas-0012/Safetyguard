@@ -26,7 +26,8 @@ object MultipartUploader {
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                 connectTimeout = 30000
-                readTimeout = 60000
+                readTimeout = 120000
+                setChunkedStreamingMode(64 * 1024)
             }
 
             conn.outputStream.use { os ->

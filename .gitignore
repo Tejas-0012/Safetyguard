@@ -1,2 +1,8 @@
 node_modules/
 .env
+Backend/.env
+*.env
+Backend/public/uploads/
+*.key
+*.pem
+*firebase-adminsdk*.json

@@ -15,6 +15,7 @@
     
     <!-- Internet Permission (already exists) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_SMS" /> 
      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /> 
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />

@@ -109,45 +109,80 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _setupNativeHandlers();
-    _checkTileLaunch();
+    _checkColdLaunchIntents();
   }
 
   void _setupNativeHandlers() {
     NativeBridgeService.setupNativeCallbacks(
-      onOpenEmergency: () {
+      onOpenEmergency: () async {
         print('📱 Native: openEmergencyMode received');
-        _goToEmergencyMode();
+        await _goToEmergencyMode();
       },
       onStopEmergency: () {
         print('🛑 Native: onEmergencyStopped received from notification');
         if (!mounted) return;
+        final emergencyProvider = Provider.of<EmergencyProvider>(
+          context,
+          listen: false,
+        );
+        emergencyProvider.loadActiveEmergency();
         navigatorKey.currentState?.popUntil((route) => route.isFirst);
       },
     );
   }
 
-  Future<void> _checkTileLaunch() async {
-    // Wait for app to fully initialize
-    await Future.delayed(const Duration(seconds: 3));
-
+  Future<void> _checkColdLaunchIntents() async {
+    // Wait briefly for app and widgets to mount
+    await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
     try {
+      final forEmergency = await NativeBridgeService.wasLaunchedForEmergency();
+      print('📱 Native: wasLaunchedForEmergency = $forEmergency');
+      if (forEmergency) {
+        await NativeBridgeService.clearEmergencyLaunch();
+        await _goToEmergencyMode();
+        return;
+      }
+
       final fromTile = await NativeBridgeService.wasLaunchedFromTile();
       print('📱 Native: wasLaunchedFromTile = $fromTile');
-
       if (fromTile) {
         await NativeBridgeService.clearTileLaunch();
-        _goToEmergencyMode();
+        await _goToEmergencyMode();
       }
     } catch (e) {
-      print('NativeBridge error: $e');
+      print('NativeBridge cold launch error: $e');
     }
   }
 
-  void _goToEmergencyMode() {
+  Future<void> _goToEmergencyMode() async {
     if (!mounted) return;
-    navigatorKey.currentState?.pushNamed('/emergency');
+
+    try {
+      final emergencyProvider = Provider.of<EmergencyProvider>(
+        context,
+        listen: false,
+      );
+      await emergencyProvider.loadActiveEmergency();
+    } catch (e) {
+      print('Native: loadActiveEmergency error: $e');
+    }
+
+    if (!mounted) return;
+
+    // Avoid pushing duplicate /emergency route
+    bool isAlreadyOnEmergency = false;
+    navigatorKey.currentState?.popUntil((route) {
+      if (route.settings.name == '/emergency') {
+        isAlreadyOnEmergency = true;
+      }
+      return true;
+    });
+
+    if (!isAlreadyOnEmergency) {
+      navigatorKey.currentState?.pushNamed('/emergency');
+    }
   }
 
   @override

@@ -34,6 +34,7 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   bool _isCapturingImage = false;
   bool _isSendingSms = false;
   BitmapDescriptor? _personIcon;
+  bool _isLoadingEmergency = true;
 
   LocationProvider? _locationProvider;
   EmergencyProvider? _emergencyProvider;
@@ -42,17 +43,63 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
   void initState() {
     super.initState();
 
-    // 👈 Start the Native Kotlin service (camera/audio handled there)
-    ForegroundService.startEmergency();
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+    // 👈 Start the Native Kotlin service with active emergency ID (camera/audio handled there)
+    ForegroundService.startEmergency(provider.currentEmergency?.id);
 
     _loadPersonIcon();
     _setupEmergencyTracking();
+
+    if (provider.currentEmergency == null) {
+      _isLoadingEmergency = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadActiveEmergency();
+      });
+    } else {
+      _isLoadingEmergency = false;
+      _refreshReceiverLocations();
+    }
 
     // Poll backend for receiver locations every 5 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!mounted) return;
       _refreshReceiverLocations();
     });
+  }
+
+  Future<void> _loadActiveEmergency() async {
+    if (!mounted) return;
+    setState(() => _isLoadingEmergency = true);
+
+    final provider = Provider.of<EmergencyProvider>(context, listen: false);
+
+    // Try up to 5 times (1 second interval) to handle network delay from native trigger
+    for (int attempt = 0; attempt < 5; attempt++) {
+      if (!mounted) return;
+      try {
+        await provider.loadActiveEmergency();
+        if (provider.currentEmergency != null) {
+          break;
+        }
+      } catch (e) {
+        print('Error loading active emergency (attempt $attempt): $e');
+      }
+      if (provider.currentEmergency == null && attempt < 4) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+      }
+    }
+
+    if (mounted) {
+      setState(() => _isLoadingEmergency = false);
+      if (provider.currentEmergency != null) {
+        ForegroundService.startEmergency(provider.currentEmergency!.id);
+        _refreshReceiverLocations();
+        final victimPos = _locationProvider?.currentPosition;
+        if (victimPos != null) {
+          _buildAllMarkers(LatLng(victimPos.latitude, victimPos.longitude));
+        }
+      }
+    }
   }
 
   Future<void> _loadPersonIcon() async {
@@ -322,8 +369,9 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     _refreshTimer?.cancel();
     _locationProvider?.removeListener(_onLocationChanged);
 
-    // 👈 Tell the Native service to stop the camera/audio
-    ForegroundService.stopEmergency();
+    // ⚠️ DO NOT call ForegroundService.stopEmergency() here.
+    // Leaving or popping this screen must NOT terminate the active emergency.
+    // The emergency continues in background until explicitly stopped by user.
 
     super.dispose();
   }
@@ -448,50 +496,127 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
     final position = locationProvider.currentPosition;
 
     if (emergency == null) {
+      if (_isLoadingEmergency) {
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const CircularProgressIndicator(
+                    color: AppColors.danger,
+                    strokeWidth: 3,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Connecting to Emergency Mode...',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Syncing live emergency & alert details',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       return Scaffold(
         backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Emergency Status'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.error_outline,
-                  size: 60,
-                  color: AppColors.danger,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'No active emergency found',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textDark,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 32,
-                    vertical: 14,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+                  child: const Icon(
+                    Icons.info_outline,
+                    size: 60,
+                    color: AppColors.danger,
                   ),
                 ),
-                child: const Text('GO BACK'),
-              ),
-            ],
+                const SizedBox(height: 20),
+                const Text(
+                  'No active emergency found',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'There is no ongoing emergency session at this moment.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: AppColors.textLight),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+                        ),
+                      ),
+                      child: const Text('GO HOME'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _loadActiveEmergency,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('RETRY'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppColors.radiusMedium),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -832,8 +957,10 @@ class _EmergencyModeScreenState extends State<EmergencyModeScreen> {
       ),
     );
 
-    if (confirmed == true && provider.currentEmergency != null) {
-      await provider.stopEmergency(provider.currentEmergency!.id);
+    if (confirmed == true) {
+      if (provider.currentEmergency != null) {
+        await provider.stopEmergency(provider.currentEmergency!.id);
+      }
 
       // Tell the Native service to stop recording
       await ForegroundService.stopEmergency();

@@ -23,11 +23,13 @@ class MainActivity : FlutterActivity() {
     }
 
     private var fromTile = false
+    private var fromEmergency = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
         fromTile = intent?.getBooleanExtra("from_tile", false) ?: false
+        fromEmergency = intent?.getBooleanExtra("openEmergencyMode", false) ?: false
     }
 
     override fun onDestroy() {
@@ -44,6 +46,9 @@ class MainActivity : FlutterActivity() {
 
         fromTile = intent.getBooleanExtra("from_tile", false)
         val openEmergency = intent.getBooleanExtra("openEmergencyMode", false)
+        if (openEmergency) {
+            fromEmergency = true
+        }
 
         if (fromTile || openEmergency) {
             flutterEngine?.dartExecutor?.binaryMessenger?.let {
@@ -64,6 +69,11 @@ class MainActivity : FlutterActivity() {
                 "wasLaunchedFromTile" -> result.success(fromTile)
                 "clearTileLaunch" -> {
                     fromTile = false
+                    result.success(true)
+                }
+                "wasLaunchedForEmergency" -> result.success(fromEmergency)
+                "clearEmergencyLaunch" -> {
+                    fromEmergency = false
                     result.success(true)
                 }
 
@@ -95,7 +105,8 @@ class MainActivity : FlutterActivity() {
 
                 // Emergency Foreground
                 "startEmergencyForeground" -> {
-                    SafeGuardForegroundService.startEmergency(this)
+                    val emId = call.arguments as? String
+                    SafeGuardForegroundService.startEmergency(this, emId)
                     result.success(true)
                 }
                 "stopEmergencyForeground" -> {

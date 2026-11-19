@@ -10,10 +10,11 @@ class ForegroundService {
 
   /// Start foreground service in EMERGENCY mode.
   /// Shows notification: "🚨 SafeGuard EMERGENCY"
-  static Future<bool> startEmergency() async {
+  static Future<bool> startEmergency([String? emergencyId]) async {
     try {
       final result = await _channel.invokeMethod<bool>(
         'startEmergencyForeground',
+        emergencyId,
       );
       return result ?? false;
     } catch (e) {

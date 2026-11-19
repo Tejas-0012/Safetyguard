@@ -25,9 +25,13 @@ class _EmergencyRepliesScreenState extends State<EmergencyRepliesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadReplies();
-    // Poll every 5 seconds for new replies
-    _startPolling();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadReplies();
+        // Poll every 5 seconds for new replies
+        _startPolling();
+      }
+    });
   }
 
   void _startPolling() {

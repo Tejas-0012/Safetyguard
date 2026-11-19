@@ -553,7 +553,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSOSButton() {
     return Center(
       child: GestureDetector(
-        onTap: _showSOSDialog,
+        onTap: () {
+          final emergencyProvider = Provider.of<EmergencyProvider>(
+            context,
+            listen: false,
+          );
+          if (emergencyProvider.isEmergencyActive) {
+            Navigator.pushNamed(context, '/emergency');
+          } else {
+            _showSOSDialog();
+          }
+        },
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 18),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../models/emergency_model.dart';
@@ -142,6 +143,10 @@ class EmergencyProvider extends ChangeNotifier {
       if (response['success'] == true) {
         _currentEmergency = Emergency.fromJson(response['emergency']);
 
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('safeguard_emergency_id', _currentEmergency!.id);
+        await prefs.setBool('safeguard_emergency_active', true);
+
         // ✅ Capture the receiverLinks array (per-contact tokens)
         if (response['receiverLinks'] is List) {
           _currentReceiverLinks = (response['receiverLinks'] as List)
@@ -281,12 +286,16 @@ class EmergencyProvider extends ChangeNotifier {
       final response = await _apiService.getActiveEmergency();
       if (response['success'] == true) {
         final emergencyData = response['emergency'];
+        final prefs = await SharedPreferences.getInstance();
         if (emergencyData != null) {
           _currentEmergency = Emergency.fromJson(emergencyData);
           print('✅ Loaded active emergency: ${_currentEmergency!.id}');
+          await prefs.setString('safeguard_emergency_id', _currentEmergency!.id);
+          await prefs.setBool('safeguard_emergency_active', true);
         } else {
           _currentEmergency = null;
           print('ℹ️ No active emergency');
+          await prefs.setBool('safeguard_emergency_active', false);
         }
         notifyListeners();
       }
@@ -300,10 +309,14 @@ class EmergencyProvider extends ChangeNotifier {
       final response = await _apiService.getEmergencyStatus(emergencyId);
       if (response['success'] == true) {
         final emergency = Emergency.fromJson(response['emergency']);
+        final prefs = await SharedPreferences.getInstance();
         if (emergency.status != 'active') {
           _currentEmergency = null;
+          await prefs.setBool('safeguard_emergency_active', false);
         } else {
           _currentEmergency = emergency;
+          await prefs.setString('safeguard_emergency_id', emergency.id);
+          await prefs.setBool('safeguard_emergency_active', true);
         }
         notifyListeners();
       }

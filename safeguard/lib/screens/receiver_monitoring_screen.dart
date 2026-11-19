@@ -29,8 +29,12 @@ class _ReceiverMonitoringScreenState extends State<ReceiverMonitoringScreen> {
   @override
   void initState() {
     super.initState();
-    _loadEmergencyDetails();
-    _setupSmsListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadEmergencyDetails();
+        _setupSmsListener();
+      }
+    });
   }
 
   Future<void> _loadEmergencyDetails() async {

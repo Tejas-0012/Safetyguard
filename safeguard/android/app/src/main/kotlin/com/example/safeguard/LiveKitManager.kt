@@ -1,6 +1,8 @@
 package com.example.safeguard
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
@@ -8,6 +10,15 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.util.Log
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
@@ -46,11 +57,11 @@ class LiveKitManager(
 ) {
     companion object {
         private const val TAG = "LiveKitManager"
-        // 720p HD with up to 60 FPS target and 3.0 Mbps bitrate for butter-smooth streaming
+        // 720p HD with 30 FPS target and 3.5 Mbps bitrate for crystal-clear real-time streaming
         private const val VIDEO_WIDTH = 1280
         private const val VIDEO_HEIGHT = 720
-        private const val VIDEO_FPS = 60
-        private const val MAX_BITRATE = 3_000_000 // 3.0 Mbps for high FPS clarity
+        private const val VIDEO_FPS = 30
+        private const val MAX_BITRATE = 3_500_000 // 3.5 Mbps for sharp, high-clarity streaming
         private const val CAPTURE_INTERVAL_MS = 15_000L // Frame capture every 15 seconds
     }
 
@@ -69,6 +80,14 @@ class LiveKitManager(
     private var currentAuthToken: String? = null
     private var currentApiBase: String? = null
     private var captureIndex = 0
+
+    // On-device Video Recording (CameraX VideoCapture)
+    private var videoCapture: VideoCapture<Recorder>? = null
+    private var activeRecording: Recording? = null
+    private var currentVideoFile: File? = null
+    private var recordingStartMs = 0L
+    private var autoStopJob: Job? = null
+    private var isEmergencyOngoing = false
 
     @Volatile
     private var shouldCaptureNextFrame = false
@@ -95,27 +114,43 @@ class LiveKitManager(
         currentAuthToken = authToken
         currentApiBase = apiBase
         captureIndex = 0
+        isEmergencyOngoing = true
 
         scope.launch {
             try {
-                val provider = CameraXHelper.createCameraProvider(lifecycleOwner)
-                if (provider.isSupported(context)) {
-                    CameraCapturerUtils.registerCameraProvider(provider)
-                    cameraProvider = provider
-                } else {
-                    Log.e(TAG, "CameraX Provider not supported on this device")
-                    return@launch
+                // Initialize CameraX Recorder and VideoCapture UseCase
+                try {
+                    val recorder = Recorder.Builder()
+                        .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
+                        .build()
+                    val vCap = VideoCapture.withOutput(recorder)
+                    videoCapture = vCap
+
+                    val provider = CameraXHelper.createCameraProvider(lifecycleOwner, arrayOf(vCap))
+                    if (provider.isSupported(context)) {
+                        CameraCapturerUtils.registerCameraProvider(provider)
+                        cameraProvider = provider
+                        Log.d(TAG, "CameraX provider registered successfully")
+                    } else {
+                        Log.w(TAG, "CameraX Provider not supported on this device, using standard Camera2")
+                    }
+                } catch (ce: Exception) {
+                    Log.w(TAG, "CameraX registration notice (falling back to Camera2): ${ce.message}")
                 }
 
                 val cleanBase = apiBase.removeSuffix("/")
+                val cleanToken = authToken.removePrefix("Bearer ").removePrefix("bearer ").trim()
                 val url = URL("$cleanBase/livekit/token?emergencyId=$emergencyId&participantName=Victim&isReceiver=false")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
-                    setRequestProperty("Authorization", "Bearer $authToken")
+                    setRequestProperty("Authorization", "Bearer $cleanToken")
+                    connectTimeout = 10000
+                    readTimeout = 10000
                 }
 
                 if (conn.responseCode !in 200..299) {
-                    Log.e(TAG, "Failed to get LiveKit token: HTTP ${conn.responseCode}")
+                    val errText = conn.errorStream?.bufferedReader()?.readText() ?: ""
+                    Log.e(TAG, "Failed to get LiveKit token: HTTP ${conn.responseCode} - $errText")
                     return@launch
                 }
 
@@ -270,6 +305,9 @@ class LiveKitManager(
 
                     Log.d(TAG, "📸 Published: $trackName ($deviceId) at ${VIDEO_WIDTH}x${VIDEO_HEIGHT} @ ${VIDEO_FPS}fps")
                     sendCameraState()
+
+                    // Start local on-device video recording to MP4 if not already recording
+                    startLocalRecording()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to publish $trackName", e)
@@ -403,14 +441,155 @@ class LiveKitManager(
         }
     }
 
+    private fun startLocalRecording() {
+        val vCap = videoCapture ?: return
+        if (activeRecording != null || !isEmergencyOngoing) return
+
+        try {
+            val dir = File(context.cacheDir, "emergency_videos").apply { mkdirs() }
+            val videoFile = File(dir, "emergency_${currentEmergencyId}_${System.currentTimeMillis()}.mp4")
+            currentVideoFile = videoFile
+
+            val outputOptions = FileOutputOptions.Builder(videoFile).build()
+            val pending = vCap.output.prepareRecording(context, outputOptions)
+
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                try {
+                    pending.withAudioEnabled()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not enable audio for video recording", e)
+                }
+            }
+
+            recordingStartMs = System.currentTimeMillis()
+            activeRecording = pending.start(ContextCompat.getMainExecutor(context)) { event ->
+                when (event) {
+                    is VideoRecordEvent.Start -> {
+                        Log.d(TAG, "🎥 On-device video recording started: ${videoFile.name}")
+                    }
+                    is VideoRecordEvent.Finalize -> {
+                        val durationSec = if (recordingStartMs > 0) {
+                            ((System.currentTimeMillis() - recordingStartMs) / 1000).toInt()
+                        } else {
+                            0
+                        }
+                        if (event.hasError()) {
+                            Log.e(TAG, "❌ Video recording finalize error: code ${event.error}")
+                        } else {
+                            Log.d(TAG, "🎥 Video recording finalized: ${videoFile.name} (${videoFile.length()} bytes, ${durationSec}s)")
+                        }
+
+                        // Upload the recorded segment if it has valid data
+                        if (videoFile.exists() && videoFile.length() > 5000) {
+                            uploadRecordedVideo(videoFile, durationSec)
+                        } else {
+                            try { videoFile.delete() } catch (_: Exception) {}
+                        }
+
+                        activeRecording = null
+                    }
+                }
+            }
+
+            // Start 10-minute auto-cutoff
+            start10MinTimer()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting local video recording", e)
+        }
+    }
+
+    private fun start10MinTimer() {
+        autoStopJob?.cancel()
+        autoStopJob = scope.launch {
+            delay(10 * 60 * 1000L) // 10 minutes (600,000 ms)
+            Log.d(TAG, "⏰ 10-minute video limit reached. Stopping video recording...")
+            stopRecordingInternal()
+        }
+    }
+
+    fun stopAndUploadVideo() {
+        isEmergencyOngoing = false
+        autoStopJob?.cancel()
+        autoStopJob = null
+        stopRecordingInternal()
+    }
+
+    private fun stopRecordingInternal() {
+        val rec = activeRecording
+        activeRecording = null
+        if (rec != null) {
+            try {
+                rec.stop()
+                rec.close()
+                Log.d(TAG, "🛑 Active video recording stopped")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping active recording", e)
+            }
+        }
+    }
+
+    private fun uploadRecordedVideo(file: File, durationSeconds: Int) {
+        val emergencyId = currentEmergencyId ?: return
+        val token = currentAuthToken ?: return
+        val apiBase = currentApiBase ?: return
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                // Short wait to ensure file handles are fully flushed
+                delay(600L)
+                if (!file.exists() || file.length() < 1024) {
+                    Log.w(TAG, "Video file ${file.name} invalid or empty (${file.length()} bytes)")
+                    return@launch
+                }
+
+                val cleanBase = apiBase.removeSuffix("/")
+                val uploadUrl = "$cleanBase/emergency/$emergencyId/video"
+                Log.d(TAG, "📤 Uploading recorded video (${file.length()} bytes, ${durationSeconds}s) to $uploadUrl")
+
+                val isoDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }.format(Date())
+
+                val ok = MultipartUploader.upload(
+                    url = uploadUrl,
+                    token = token,
+                    file = file,
+                    fileField = "video",
+                    fileName = file.name,
+                    mimeType = "video/mp4",
+                    extraFields = mapOf(
+                        "durationSeconds" to durationSeconds.toString(),
+                        "recordedAt" to isoDate
+                    )
+                )
+
+                if (ok) {
+                    Log.d(TAG, "✅ Recorded video ${file.name} uploaded successfully!")
+                } else {
+                    Log.e(TAG, "❌ Failed to upload recorded video ${file.name}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in uploadRecordedVideo", e)
+            } finally {
+                try { file.delete() } catch (_: Exception) {}
+            }
+        }
+    }
+
     fun stopStreaming() {
+        isEmergencyOngoing = false
         eventsJob?.cancel()
         eventsJob = null
         autoCaptureJob?.cancel()
         autoCaptureJob = null
+        autoStopJob?.cancel()
+        autoStopJob = null
 
         scope.launch {
             try {
+                stopRecordingInternal()
+                delay(600) // allow CameraX to finalize and flush
+
                 currentVideoTrack?.removeRenderer(frameCaptureSink)
                 currentVideoTrack?.stopCapture()
                 currentVideoTrack = null
